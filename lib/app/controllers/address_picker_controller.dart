@@ -1,51 +1,17 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-
 import '../routes/app_routes.dart';
+import '../services/nominatim_service.dart';
 
-class AddressResult {
-  final String main;
-  final String detail;
-  final String full;
-
-  AddressResult({required this.main, required this.detail, required this.full});
-
-  factory AddressResult.fromNominatim(Map<String, dynamic> json) {
-    final addr = json['address'] as Map<String, dynamic>? ?? {};
-    final main = addr['road'] ??
-        addr['neighbourhood'] ??
-        addr['suburb'] ??
-        addr['village'] ??
-        json['display_name'].toString().split(',').first;
-    final parts = <String>[];
-    if (addr['suburb'] != null) {
-      parts.add(addr['suburb']);
-    }
-    if (addr['city'] != null) {
-      parts.add(addr['city']);
-    } else if (addr['town'] != null) {
-      parts.add(addr['town']);
-    } else if (addr['regency'] != null) {
-      parts.add(addr['regency']);
-    }
-    if (addr['state'] != null) {
-      parts.add(addr['state']);
-    }
-    return AddressResult(
-      main: main.toString(),
-      detail: parts.join(', '),
-      full: json['display_name'].toString(),
-    );
-  }
-}
+export '../services/nominatim_service.dart' show AddressResult;
 
 class AddressPickerController extends GetxController {
   static const String kSelectedAddress = 'selected_address';
+
+  final _service = NominatimService();
 
   final TextEditingController searchController = TextEditingController();
   final query = ''.obs;
@@ -78,31 +44,8 @@ class AddressPickerController extends GetxController {
 
   Future<void> _search(String q) async {
     isLoading.value = true;
-    try {
-      final uri = Uri.https('nominatim.openstreetmap.org', '/search', {
-        'q': q,
-        'format': 'json',
-        'addressdetails': '1',
-        'limit': '10',
-        'countrycodes': 'id',
-        'accept-language': 'id',
-      });
-
-      final response = await http.get(uri, headers: {
-        'User-Agent': 'SehatlyApp/1.0',
-      });
-
-      if (response.statusCode == 200) {
-        final List data = jsonDecode(response.body);
-        results.assignAll(
-          data.map((e) => AddressResult.fromNominatim(e as Map<String, dynamic>)).toList(),
-        );
-      }
-    } catch (e) {
-      debugPrint('Nominatim error: $e');
-    } finally {
-      isLoading.value = false;
-    }
+    results.assignAll(await _service.search(q));
+    isLoading.value = false;
   }
 
   Future<void> selectAddress(AddressResult address) async {

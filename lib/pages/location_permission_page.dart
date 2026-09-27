@@ -85,17 +85,7 @@ class LocationPermissionPage extends GetView<LocationPermissionController> {
                     label: 'TENTUKAN ALAMAT',
                     onPressed: () => AddressPickerSheet.show(context),
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Kamu tetap bisa mengubah izin lokasi\nkapan saja di Pengaturan aplikasi.',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      color: Colors.grey[500],
-                      fontSize: 12,
-                      height: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
+                 SizedBox(height: 100),
                 ],
               ),
             ),
