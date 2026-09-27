@@ -46,7 +46,7 @@ class _SplashContent extends StatefulWidget {
 }
 
 class _SplashContentState extends State<_SplashContent>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _ctrl;
 
   late final Animation<double> _brandFade;
@@ -58,6 +58,7 @@ class _SplashContentState extends State<_SplashContent>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
@@ -88,12 +89,27 @@ class _SplashContentState extends State<_SplashContent>
       parent: _ctrl,
       curve: const Interval(0.55, 1.0, curve: Curves.easeOutCubic),
     );
+  }
 
-    _ctrl.forward();
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && !_ctrl.isAnimating && _ctrl.value == 0) {
+      _ctrl.forward();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await Future.delayed(const Duration(milliseconds: 300));
+      if (mounted && _ctrl.value == 0) _ctrl.forward();
+    });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _ctrl.dispose();
     super.dispose();
   }

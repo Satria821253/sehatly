@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../app/controllers/location_permission_controller.dart';
 import '../app/theme/app_colors.dart';
 import '../widgets/primary_button.dart';
+import '../widgets/outline_button.dart';
 import 'address_picker_page.dart' show AddressPickerSheet;
 
 /// Halaman izin lokasi — tampil setelah splash pada first launch,
@@ -80,7 +81,7 @@ class LocationPermissionPage extends GetView<LocationPermissionController> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  _OutlineActionButton(
+                  OutlineButton(
                     label: 'TENTUKAN ALAMAT',
                     onPressed: () => AddressPickerSheet.show(context),
                   ),
@@ -105,44 +106,3 @@ class LocationPermissionPage extends GetView<LocationPermissionController> {
   }
 }
 
-/// Tombol sekunder: outline biru, teks biru.
-class _OutlineActionButton extends StatelessWidget {
-  const _OutlineActionButton({
-    required this.label,
-    required this.onPressed,
-  });
-
-  final String label;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: Material(
-        color: AppColors.white,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(30),
-          side: const BorderSide(color: AppColors.primary, width: 1.6),
-        ),
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(30),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 15),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(
-                color: AppColors.primary,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
