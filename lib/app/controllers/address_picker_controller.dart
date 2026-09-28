@@ -6,8 +6,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../routes/app_routes.dart';
 import '../services/nominatim_service.dart';
 
-export '../services/nominatim_service.dart' show AddressResult;
-
 class AddressPickerController extends GetxController {
   static const String kSelectedAddress = 'selected_address';
 
@@ -57,14 +55,17 @@ class AddressPickerController extends GetxController {
   }
 
   void pickOnMap() {
-    Get.snackbar(
-      'Pilih lewat peta',
-      'Fitur peta segera hadir.',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: const Color(0xFF0C1E52),
-      colorText: const Color(0xFFFFFFFF),
-      margin: const EdgeInsets.all(16),
-      duration: const Duration(seconds: 3),
-    );
+    Get.toNamed(AppRoutes.mapPicker);
+  }
+
+  Future<AddressResult?> reverseGeocode(double lat, double lon) {
+    return _service.reverseGeocode(lat, lon);
+  }
+
+  Future<void> confirmMapAddress(String full, double lat, double lon) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(kSelectedAddress, full);
+    await prefs.setBool('manual_address_set', true);
+    Get.offAllNamed(AppRoutes.home);
   }
 }

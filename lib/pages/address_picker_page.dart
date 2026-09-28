@@ -177,7 +177,7 @@ class _ResultsList extends StatelessWidget {
                 height: 24,
                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
               ),
-              title: Container(
+              title: Container(   
                 height: 14,
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
               ),

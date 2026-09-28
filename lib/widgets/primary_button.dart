@@ -1,61 +1,70 @@
 import 'package:flutter/material.dart';
-
+import 'package:google_fonts/google_fonts.dart';
 import '../app/theme/app_colors.dart';
 
-/// Tombol utama: gradasi penuh (Sehatly blue -> teal), teks putih.
-class PrimaryButton extends StatelessWidget {
+class PrimaryButton extends StatefulWidget {
   const PrimaryButton({
     super.key,
     required this.label,
     required this.onPressed,
-    this.expand = true,
+    this.isLoading = false,
   });
 
   final String label;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final bool isLoading;
 
-  /// true -> melebar penuh mengikuti lebar parent.
-  final bool expand;
+  @override
+  State<PrimaryButton> createState() => _PrimaryButtonState();
+}
+
+class _PrimaryButtonState extends State<PrimaryButton> {
+  bool _pressed = false;
 
   @override
   Widget build(BuildContext context) {
-    final button = DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.secondary],
-        ),
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.35),
-            blurRadius: 14,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(30),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
+    final disabled = widget.onPressed == null || widget.isLoading;
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.96 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        child: SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton(
+            onPressed: disabled ? null : widget.onPressed,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: AppColors.primary.withOpacity(0.6),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(30),
               ),
             ),
+            child: widget.isLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2.5,
+                    ),
+                  )
+                : Text(
+                    widget.label,
+                    style: GoogleFonts.poppins(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
           ),
         ),
       ),
     );
-
-    if (!expand) return button;
-    return SizedBox(width: double.infinity, child: button);
   }
 }

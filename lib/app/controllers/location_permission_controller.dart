@@ -7,7 +7,6 @@ import '../routes/app_routes.dart';
 class LocationPermissionController extends GetxController
     with WidgetsBindingObserver {
   static const String _kManualAddress = 'manual_address_set';
-  static const String _kDenied = 'permission_denied';
 
   final isLoading = false.obs;
   final isPermanentlyDenied = false.obs;
@@ -28,13 +27,7 @@ class LocationPermissionController extends GetxController
 
   Future<void> _checkInitialState() async {
     final permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.deniedForever) {
-      isPermanentlyDenied.value = true;
-      return;
-    }
-    // Cek flag — user pernah tolak dialog sebelumnya
-    final prefs = await SharedPreferences.getInstance();
-    isPermanentlyDenied.value = prefs.getBool(_kDenied) ?? false;
+    isPermanentlyDenied.value = permission == LocationPermission.deniedForever;
   }
 
   @override
@@ -49,14 +42,20 @@ class LocationPermissionController extends GetxController
     final permission = await Geolocator.checkPermission();
     debugPrint('>>> recheck after settings: $permission');
     if (permission == LocationPermission.whileInUse ||
-        permission == LocationPermission.always ||
-        permission == LocationPermission.denied) {
-      // denied = "selalu tanya" → reset flag, masuk home
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_kDenied);
+        permission == LocationPermission.always) {
       isPermanentlyDenied.value = false;
       _navigateHome();
-    } else if (permission == LocationPermission.deniedForever) {
+    } else if (permission == LocationPermission.denied) {
+      // Selalu tanya → request langsung
+      isPermanentlyDenied.value = false;
+      final result = await Geolocator.requestPermission();
+      if (result == LocationPermission.whileInUse ||
+          result == LocationPermission.always) {
+        _navigateHome();
+      } else if (result == LocationPermission.deniedForever) {
+        isPermanentlyDenied.value = true;
+      }
+    } else {
       isPermanentlyDenied.value = true;
     }
   }
@@ -81,6 +80,7 @@ class LocationPermissionController extends GetxController
     if (isLoading.value) return;
     isLoading.value = true;
     try {
+      // Sudah permanently denied → buka settings
       if (isPermanentlyDenied.value) {
         _waitingForSettings = true;
         isLoading.value = false;
@@ -88,6 +88,7 @@ class LocationPermissionController extends GetxController
         return;
       }
 
+      // Cek service lokasi aktif
       final serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         _waitingForSettings = true;
@@ -97,7 +98,6 @@ class LocationPermissionController extends GetxController
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
-      debugPrint('>>> checkPermission: $permission');
 
       if (permission == LocationPermission.deniedForever) {
         isPermanentlyDenied.value = true;
@@ -107,21 +107,19 @@ class LocationPermissionController extends GetxController
         return;
       }
 
+      // denied atau belum pernah diminta → tampilkan dialog sistem
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         debugPrint('>>> requestPermission: $permission');
       }
 
-      final prefs = await SharedPreferences.getInstance();
       if (permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always) {
-        await prefs.remove(_kDenied);
         _navigateHome();
-      } else {
-        // denied atau deniedForever → simpan flag, ubah tombol ke "PERGI KE PENGATURAN"
+      } else if (permission == LocationPermission.deniedForever) {
         isPermanentlyDenied.value = true;
-        await prefs.setBool(_kDenied, true);
       }
+      // denied (selalu tanya) → tombol tetap "AKTIFKAN LOKASI", user bisa klik lagi
     } catch (e) {
       debugPrint('Location error: $e');
     } finally {
@@ -131,12 +129,13 @@ class LocationPermissionController extends GetxController
 
   Future<void> chooseManualAddress(BuildContext context) async {
     if (isLoading.value) return;
-    // Lazy import untuk hindari circular dependency
     await Get.toNamed(AppRoutes.addressPicker);
   }
 
   void _navigateHome() {
     if (Get.currentRoute == AppRoutes.locationPermission) {
+      SharedPreferences.getInstance()
+          .then((prefs) => prefs.setBool('has_reached_home', true));
       Get.offAllNamed(AppRoutes.home);
     }
   }
