@@ -68,7 +68,10 @@ class LocationPermissionPage extends GetView<LocationPermissionController> {
                     label: controller.isPermanentlyDenied.value
                         ? 'PERGI KE PENGATURAN'
                         : 'AKTIFKAN LOKASI',
-                    onPressed: controller.activateLocation,
+                    isLoading: controller.isLoading.value,
+                    onPressed: controller.isLoading.value
+                        ? null
+                        : controller.activateLocation,
                   )),
                   const SizedBox(height: 16),
                   Text(

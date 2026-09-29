@@ -29,6 +29,10 @@ class AddressPickerSheet extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      // Panel bisa digeser ke bawah dari mana pun untuk menutup, dan tap
+      // di area luar sheet juga menutup — pengganti tombol back.
+      enableDrag: true,
+      isDismissible: true,
       builder: (_) => const AddressPickerSheet(),
     );
   }
@@ -59,17 +63,32 @@ class _AddressPickerContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 10),
+        // Pegangan di atas — selain isyarat bahwa panel bisa digeser ke
+        // bawah, ketuk di sini juga menutup sheet tanpa tombol back.
         Center(
-          child: Container(
-            width: 44,
-            height: 5,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE5E7EB),
-              borderRadius: BorderRadius.circular(3),
+          child: Semantics(
+            button: true,
+            label: 'Tutup panel',
+            child: GestureDetector(
+              key: const Key('address_picker_handle'),
+              onTap: () => Navigator.of(context).maybePop(),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                child: Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Text(
@@ -201,7 +220,10 @@ class _ResultsList extends StatelessWidget {
         itemBuilder: (context, index) {
           final address = controller.results[index];
           return ListTile(
-            onTap: () => controller.selectAddress(address),
+            onTap: controller.isSelecting.value
+                ? null
+                : () => controller.selectAddress(address),
+            enabled: !controller.isSelecting.value,
             leading: const Icon(Icons.location_on),
             title: Text(
               address.main,

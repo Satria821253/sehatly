@@ -2,10 +2,21 @@
     <!-- Izin lokasi: dipakai halaman LocationPermissionPage -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <!-- Izin internet untuk SEMUA build type.
+         Flutter hanya menambahkannya otomatis di debug/profile (lihat
+         src/debug/AndroidManifest.xml) — tanpa ini, build release tidak bisa
+         memuat tile peta, mencari alamat, maupun reverse geocode. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="sehatly"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- API key diambil dari android/key.properties (di-gitignore)
+             lewat manifestPlaceholders di build.gradle.kts — tidak ditulis
+             di sini supaya tidak ikut ter-push. -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${GOOGLE_MAPS_API_KEY}"/>
         <activity
             android:name=".MainActivity"
             android:exported="true"

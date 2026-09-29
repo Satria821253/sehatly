@@ -1,4 +1,12 @@
-# Miscellaneous
+# ── Flutter / Dart ──────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+**/doc/api/
 *.class
 *.log
 *.pyc
@@ -11,38 +19,66 @@
 .svn/
 .swiftpm/
 migrate_working_dir/
+app.*.symbols
+app.*.map.json
 
-# IntelliJ related
+# ── IDE ─────────────────────────────────────────────────────────
 *.iml
 *.ipr
 *.iws
 .idea/
+.vscode/*
+!.vscode/settings.json
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# ── Android ─────────────────────────────────────────────────────
+android/.gradle
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+android/**/gradle-wrapper.jar
+android/**/GeneratedPluginRegistrant.java
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
+# ── iOS / Xcode ─────────────────────────────────────────────────
+ios/**/dgph
+ios/*.mode1v3
+ios/*.mode2v3
+ios/*.moved-aside
+ios/*.pbxuser
+ios/*.perspectivev3
+ios/**/*sync/
+ios/.sconsign.dblite
+ios/.tags*
+ios/**/.vagrant/
+ios/**/DerivedData/
+ios/Flutter/App.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/ephemeral/
+ios/Flutter/app.flx
+ios/Flutter/app.zip
+ios/Flutter/flutter_assets/
+ios/Flutter/flutter_export_environment.sh
+ios/ServiceDefinitions.json
+ios/Runner/GeneratedPluginRegistrant.*
 
-# Symbolication related
-app.*.symbols
+# ── RAHASIA — jangan sampai ter-push ────────────────────────────
+# API key Google (Dart)
+lib/app/config/api_key.g.dart
 
-# Obfuscation related
-app.*.map.json
+# API key Google Maps + signing (Android)
+**/key.properties
+**/*.jks
+**/*.keystore
+**/*.p12
+**/*.pem
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# Widget Preview related
-.widget_preview/
+# Lingkungan & layanan pihak ketiga
+.env
+.env.*
+!.env.example
+**/google-services.json
+**/GoogleService-Info.plist
+**/service-account*.json
+**/*-service-account.json

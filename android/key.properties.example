@@ -1,0 +1,14 @@
+# Template konfigurasi rahasia Android.
+#
+# Cara pakai:
+#   1. Salin file ini menjadi key.properties (di folder yang sama)
+#        copy android\key.properties.example android\key.properties
+#   2. Isi API key Google Maps SDK Anda.
+#
+# key.properties masuk daftar .gitignore sehingga tidak ikut ter-push.
+# File ini juga tempat yang tepat untuk data signing rilis nanti:
+#   storeFile=...
+#   storePassword=...
+#   keyAlias=...
+#   keyPassword=...
+GOOGLE_MAPS_API_KEY=

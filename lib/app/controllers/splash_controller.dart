@@ -1,12 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../config/prefs_keys.dart';
 import '../controllers/location_permission_controller.dart';
 import '../routes/app_routes.dart';
 
 class SplashController extends GetxController {
   static const Duration displayDuration = Duration(milliseconds: 3500);
-  static const String _kHasOpened = 'has_reached_home';
 
   @override
   void onReady() {
@@ -19,8 +19,8 @@ class SplashController extends GetxController {
     if (Get.currentRoute != AppRoutes.splash) return;
 
     final prefs = await SharedPreferences.getInstance();
-    final hasReachedHome = prefs.getBool(_kHasOpened) ?? false;
-    final hasSeenIntro = prefs.getBool('has_seen_intro') ?? false;
+    final hasReachedHome = prefs.getBool(PrefsKeys.hasReachedHome) ?? false;
+    final hasSeenIntro = prefs.getBool(PrefsKeys.hasSeenIntro) ?? false;
 
     String route;
     if (!hasReachedHome) {

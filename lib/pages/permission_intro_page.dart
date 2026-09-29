@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:sehatly/app/config/prefs_keys.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../app/models/permission_item.dart';
 import '../app/routes/app_routes.dart';
@@ -24,7 +25,7 @@ class PermissionIntroPage extends GetView<PermissionIntroController> {
           icon: const Icon(Icons.arrow_back, color: Color(0xFF111827)),
           onPressed: () async {
             final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('has_seen_intro', true);
+            await prefs.setBool(PrefsKeys.hasSeenIntro, true);
             Get.offAllNamed(AppRoutes.home);
           },
         ),
@@ -73,7 +74,6 @@ class PermissionIntroPage extends GetView<PermissionIntroController> {
                       const SizedBox(height: 4),
                       PrivacyFooter(
                         onTap: () {
-                          // TODO: buka halaman kebijakan privasi
                         },
                       ),
                       const SizedBox(height: 8),

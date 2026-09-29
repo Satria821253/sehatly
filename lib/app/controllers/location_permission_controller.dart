@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../pages/address_picker_page.dart' show AddressPickerSheet;
+import '../config/prefs_keys.dart';
 import '../routes/app_routes.dart';
+import '../services/reverse_geocoder.dart';
 
 class LocationPermissionController extends GetxController
     with WidgetsBindingObserver {
-  static const String _kManualAddress = 'manual_address_set';
-
   final isLoading = false.obs;
   final isPermanentlyDenied = false.obs;
   bool _waitingForSettings = false;
@@ -44,14 +45,14 @@ class LocationPermissionController extends GetxController
     if (permission == LocationPermission.whileInUse ||
         permission == LocationPermission.always) {
       isPermanentlyDenied.value = false;
-      _navigateHome();
+      await _onLocationGranted();
     } else if (permission == LocationPermission.denied) {
       // Selalu tanya → request langsung
       isPermanentlyDenied.value = false;
       final result = await Geolocator.requestPermission();
       if (result == LocationPermission.whileInUse ||
           result == LocationPermission.always) {
-        _navigateHome();
+        await _onLocationGranted();
       } else if (result == LocationPermission.deniedForever) {
         isPermanentlyDenied.value = true;
       }
@@ -69,7 +70,9 @@ class LocationPermissionController extends GetxController
         return AppRoutes.home;
       }
       final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool(_kManualAddress) == true) return AppRoutes.home;
+      if (prefs.getBool(PrefsKeys.manualAddressSet) == true) {
+        return AppRoutes.home;
+      }
       return AppRoutes.locationPermission;
     } catch (_) {
       return AppRoutes.locationPermission;
@@ -115,7 +118,7 @@ class LocationPermissionController extends GetxController
 
       if (permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always) {
-        _navigateHome();
+        await _onLocationGranted();
       } else if (permission == LocationPermission.deniedForever) {
         isPermanentlyDenied.value = true;
       }
@@ -129,13 +132,49 @@ class LocationPermissionController extends GetxController
 
   Future<void> chooseManualAddress(BuildContext context) async {
     if (isLoading.value) return;
-    await Get.toNamed(AppRoutes.addressPicker);
+    // Bottom sheet, bukan halaman — panel bisa digeser ke bawah untuk
+    // menutup tanpa tombol back.
+    await AddressPickerSheet.show(context);
+  }
+
+  /// Izin baru saja diberikan → ambil lokasi GPS + alamatnya dulu, baru
+  /// pindah ke home, supaya kartu alamat di halaman home langsung terisi
+  /// (bukan kosong seperti sebelumnya).
+  Future<void> _onLocationGranted() async {
+    await _captureLocation();
+    _navigateHome();
+  }
+
+  /// Simpan koordinat GPS lalu reverse geocode ke alamat lengkap.
+  /// Gagal di tengah jalan tidak membatalkan navigasi — home tetap terbuka
+  /// dan HomeController akan mencoba melengkapi alamatnya sendiri.
+  Future<void> _captureLocation() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Hormati alamat yang sudah dipilih user lewat pencarian/peta.
+      final saved = prefs.getString(PrefsKeys.selectedAddress);
+      if (saved != null && saved.isNotEmpty) return;
+
+      final coords = await currentCoordinates();
+      if (coords == null) return;
+
+      await prefs.setDouble(PrefsKeys.selectedLat, coords.lat);
+      await prefs.setDouble(PrefsKeys.selectedLng, coords.lng);
+
+      final address = await lookupAddress(coords.lat, coords.lng);
+      if (address != null && address.isNotEmpty) {
+        await prefs.setString(PrefsKeys.selectedAddress, address);
+      }
+    } catch (e) {
+      debugPrint('>>> simpan lokasi GPS: $e');
+    }
   }
 
   void _navigateHome() {
     if (Get.currentRoute == AppRoutes.locationPermission) {
       SharedPreferences.getInstance()
-          .then((prefs) => prefs.setBool('has_reached_home', true));
+          .then((prefs) => prefs.setBool(PrefsKeys.hasReachedHome, true));
       Get.offAllNamed(AppRoutes.home);
     }
   }

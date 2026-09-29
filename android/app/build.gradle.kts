@@ -1,12 +1,28 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// API key Google Maps dibaca dari android/key.properties (file ini masuk
+// .gitignore supaya rahasia tidak ter-push). Salin key.properties.example
+// menjadi key.properties lalu isi GOOGLE_MAPS_API_KEY-nya.
+// Kalau file tidak ada → value kosong: peta tampil polos, aplikasi tidak
+// crash.
+val googleMapsApiKey: String = run {
+    val props = Properties()
+    val f = rootProject.file("key.properties")
+    if (f.exists()) {
+        f.inputStream().use { stream -> props.load(stream) }
+    }
+    props.getProperty("GOOGLE_MAPS_API_KEY") ?: ""
+}
+
 android {
     namespace = "com.example.sehatly"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -27,6 +43,10 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // Dipakai AndroidManifest.xml → com.google.android.geo.API_KEY
+        // (placeholder, bukan resValue — AGP 9 mematikan resValue di defaultConfig)
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = googleMapsApiKey
     }
 
     buildTypes {

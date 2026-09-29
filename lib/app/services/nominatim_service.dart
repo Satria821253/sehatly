@@ -1,56 +1,91 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
 import '../models/address_result.dart';
 
 export '../models/address_result.dart';
 
+/// Fallback pencarian alamat memakai **OpenStreetMap Nominatim** — gratis,
+/// tanpa API key, tanpa billing.
+///
+/// Dipakai otomatis oleh [AddressPickerController] hanya ketika Google
+/// (Places Autocomplete / Geocoding API) gagal, misalnya billing belum
+/// aktif. Begitu Google jalan, fallback ini otomatis tidak terpakai.
+///
+/// Kebijakan Nominatim: maksimal 1 request/detik + User-Agent wajib.
 class NominatimService {
-  static const _baseUrl = 'nominatim.openstreetmap.org';
-  static const _headers = {'User-Agent': 'SehatlyApp/1.0'};
+  static const _host = 'nominatim.openstreetmap.org';
+  static const _headers = {'User-Agent': 'SehatlyApp/1.0 (address lookup)'};
+  static const _timeout = Duration(seconds: 10);
+
+  /// Jeda minimum antar request agar tidak melanggar aturan Nominatim.
+  static const _minInterval = Duration(milliseconds: 1100);
+  static DateTime? _lastCall;
+
+  static Future<void> _throttle() async {
+    final last = _lastCall;
+    if (last != null) {
+      final wait = _minInterval - DateTime.now().difference(last);
+      if (wait > Duration.zero) {
+        await Future.delayed(wait);
+      }
+    }
+    _lastCall = DateTime.now();
+  }
 
   Future<AddressResult?> reverseGeocode(double lat, double lon) async {
     try {
-      final uri = Uri.https(_baseUrl, '/reverse', {
+      await _throttle();
+      final uri = Uri.https(_host, '/reverse', {
         'lat': lat.toString(),
         'lon': lon.toString(),
-        'format': 'json',
+        'format': 'jsonv2',
         'addressdetails': '1',
         'accept-language': 'id',
       });
-      final response = await http.get(uri, headers: _headers);
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        if (data.containsKey('display_name')) {
-          return AddressResult.fromNominatim(data);
-        }
+
+      final res = await http.get(uri, headers: _headers).timeout(_timeout);
+      if (res.statusCode != 200) {
+        debugPrint('Nominatim reverse HTTP ${res.statusCode}');
+        return null;
       }
+
+      final data = jsonDecode(res.body) as Map<String, dynamic>;
+      if (data['display_name'] == null) return null;
+      return AddressResult.fromNominatim(data);
     } catch (e) {
       debugPrint('Nominatim reverse error: $e');
+      return null;
     }
-    return null;
   }
 
   Future<List<AddressResult>> search(String q) async {
     try {
-      final uri = Uri.https(_baseUrl, '/search', {
-        'q': q,
-        'format': 'json',
+      await _throttle();
+      final uri = Uri.https(_host, '/search', {
+        'q': q.trim(),
+        'format': 'jsonv2',
         'addressdetails': '1',
-        'limit': '10',
+        'limit': '5',
         'countrycodes': 'id',
         'accept-language': 'id',
       });
-      final response = await http.get(uri, headers: _headers);
-      if (response.statusCode == 200) {
-        final List data = jsonDecode(response.body);
-        return data
-            .map((e) => AddressResult.fromNominatim(e as Map<String, dynamic>))
-            .toList();
+
+      final res = await http.get(uri, headers: _headers).timeout(_timeout);
+      if (res.statusCode != 200) {
+        debugPrint('Nominatim search HTTP ${res.statusCode}');
+        return [];
       }
+
+      final data = jsonDecode(res.body) as List;
+      return data
+          .map((e) => AddressResult.fromNominatim(e as Map<String, dynamic>))
+          .toList();
     } catch (e) {
-      debugPrint('Nominatim error: $e');
+      debugPrint('Nominatim search error: $e');
+      return [];
     }
-    return [];
   }
 }

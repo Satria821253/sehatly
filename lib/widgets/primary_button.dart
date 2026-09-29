@@ -40,7 +40,7 @@ class _PrimaryButtonState extends State<PrimaryButton> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
-              disabledBackgroundColor: AppColors.primary.withOpacity(0.6),
+              disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.6),
               elevation: 0,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(30),
