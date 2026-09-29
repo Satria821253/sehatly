@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -9,6 +12,7 @@ import '../app/controllers/address_picker_controller.dart';
 import '../app/config/prefs_keys.dart';
 import '../app/services/reverse_geocoder.dart';
 import '../app/theme/app_colors.dart';
+import '../widgets/primary_button.dart';
 
 class MapPickerPage extends StatefulWidget {
   const MapPickerPage({super.key});
@@ -20,9 +24,12 @@ class MapPickerPage extends StatefulWidget {
 class _MapPickerPageState extends State<MapPickerPage> {
   GoogleMapController? _map;
 
-  /// Posisi cadangan: alamat terakhir dipilih → GPS → pusat kota
-  /// (baru dipakai kalau memang belum ada data lokasi sama sekali).
+  /// Posisi cadangan: lokasi saat ini → alamat terakhir dipilih → pusat kota.
   static const _fallbackCenter = LatLng(-7.7956, 110.3695);
+
+  /// Ukuran pin & tinggi area bottom sheet (dipakai bersama supaya sinkron).
+  static const double _pinSize = 35;
+  static const double _sheetHeight = 260;
 
   LatLng _center = _fallbackCenter;
   LatLng? _pendingCamera;
@@ -32,11 +39,20 @@ class _MapPickerPageState extends State<MapPickerPage> {
   /// true = alamat berasal dari reverse geocode (bukan koordinat mentah).
   bool _hasAddress = false;
   bool _loading = true;
-  bool _moving = false;
+
+  /// true = posisi awal sudah diketahui → peta boleh dirender.
+  bool _ready = false;
 
   /// Sedang mengambil lokasi GPS (tombol "lokasi saya" menampilkan spinner).
   bool _locating = false;
   Timer? _debounce;
+
+  // ── State pinch-zoom kustom (zoom selalu berpusat di tengah layar) ──
+  final Map<int, Offset> _pointers = {};
+  double _zoom = 16;
+  double? _startDist;
+  double _startZoom = 16;
+  bool _multiTouch = false;
 
   final _controller = Get.find<AddressPickerController>();
 
@@ -46,17 +62,31 @@ class _MapPickerPageState extends State<MapPickerPage> {
     _initPosition();
   }
 
-  /// Buka peta di lokasi yang benar — bukan di koordinat hardcode.
+  /// Buka peta di lokasi Anda — bukan di koordinat hardcode.
   Future<void> _initPosition() async {
     final target = await _resolveInitialPosition();
     if (!mounted) return;
-    setState(() => _center = target);
+    setState(() {
+      _center = target;
+      _ready = true;
+    });
     _moveCamera(target);
     await _fetchAddress(target);
   }
 
   Future<LatLng> _resolveInitialPosition() async {
-    // 1) Lokasi terakhir yang pernah dipilih user.
+    // 1) Lokasi saat ini (maks 6 detik).
+    try {
+      final coords = await currentCoordinates().timeout(
+        const Duration(seconds: 6),
+        onTimeout: () => null,
+      );
+      if (coords != null) return LatLng(coords.lat, coords.lng);
+    } catch (e) {
+      debugPrint('>>> ambil lokasi awal: $e');
+    }
+
+    // 2) Lokasi terakhir yang pernah dipilih user.
     try {
       final prefs = await SharedPreferences.getInstance();
       final lat = prefs.getDouble(PrefsKeys.selectedLat);
@@ -66,11 +96,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
       debugPrint('>>> baca lokasi tersimpan gagal: $e');
     }
 
-    // 2) GPS saat ini (sudah mengecek izin + punya timeout sendiri).
-    final coords = await currentCoordinates();
-    if (coords != null) return LatLng(coords.lat, coords.lng);
-
-    // 3) Terakhir: pusat default — peta tetap harus buka di suatu tempat.
+    // 3) Terakhir: pusat default.
     return _fallbackCenter;
   }
 
@@ -90,6 +116,45 @@ class _MapPickerPageState extends State<MapPickerPage> {
     super.dispose();
   }
 
+  // ───────────────────────── PINCH ZOOM KUSTOM ─────────────────────────
+  // Zoom bawaan Google Maps berpusat di titik jari, sehingga target kamera
+  // (lokasi di bawah pin) ikut bergeser. Di sini zoom ditangani sendiri
+  // dengan CameraUpdate.zoomTo, yang menjaga target kamera tetap.
+
+  double _dist() {
+    final p = _pointers.values.toList();
+    return (p[0] - p[1]).distance;
+  }
+
+  void _onPointerDown(PointerDownEvent e) {
+    _pointers[e.pointer] = e.position;
+    if (_pointers.length == 2) {
+      _startDist = _dist();
+      _startZoom = _zoom;
+      setState(() => _multiTouch = true); // 2 jari = zoom saja, tanpa geser
+    }
+  }
+
+  void _onPointerMove(PointerMoveEvent e) {
+    if (!_pointers.containsKey(e.pointer)) return;
+    _pointers[e.pointer] = e.position;
+    if (_pointers.length == 2 && _startDist != null && _startDist! > 0) {
+      final z = (_startZoom + math.log(_dist() / _startDist!) / math.ln2)
+          .clamp(3.0, 21.0);
+      _map?.moveCamera(CameraUpdate.zoomTo(z));
+    }
+  }
+
+  void _onPointerUp(PointerEvent e) {
+    _pointers.remove(e.pointer);
+    if (_pointers.length < 2) {
+      _startDist = null;
+      if (_multiTouch) setState(() => _multiTouch = false);
+    }
+  }
+
+  // ───────────────────────── LOKASI SAYA ─────────────────────────
+
   Future<void> _goToMyLocation() async {
     if (_locating) return;
     setState(() => _locating = true);
@@ -97,7 +162,6 @@ class _MapPickerPageState extends State<MapPickerPage> {
       final coords = await currentCoordinates();
       if (!mounted) return;
       if (coords == null) {
-        // Jangan diam saja — jelaskan kenapa tombolnya tidak bergerak.
         await _explainGpsUnavailable();
         return;
       }
@@ -187,6 +251,79 @@ class _MapPickerPageState extends State<MapPickerPage> {
     }
   }
 
+  // ───────────────────────── PIN + BAYANGAN ─────────────────────────
+  // Kotak berukuran (_pinSize x _pinSize*2), dipusatkan di layar peta.
+  // Setengah atas = pin, ujung pin tepat di tengah kotak = titik kamera.
+  // Lapisan (bawah → atas):
+  //   1) bayangan oval di tanah (di ujung pin)
+  //   2) bayangan siluet pin (blur, sedikit bergeser)
+  //   3) pin asli
+  Widget _buildPin() {
+    return SizedBox(
+      width: _pinSize,
+      height: _pinSize * 2,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 1) Bayangan oval di tanah
+          Positioned(
+            left: _pinSize / 2 - 10,
+            top: _pinSize - 3,
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 1.5),
+              child: Container(
+                width: 20,
+                height: 6,
+                decoration: const BoxDecoration(
+                  color: Color(0x59000000),
+                  borderRadius: BorderRadius.all(Radius.elliptical(10, 3)),
+                ),
+              ),
+            ),
+          ),
+
+          // 2) Bayangan siluet pin (hitam transparan + blur)
+          Positioned(
+            left: 0,
+            top: 0,
+            child: Transform.translate(
+              offset: const Offset(2, 3),
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2),
+                child: SvgPicture.asset(
+                  'assets/svg/pin.svg',
+                  width: _pinSize,
+                  height: _pinSize,
+                  fit: BoxFit.contain,
+                  colorFilter: const ColorFilter.mode(
+                    Color(0x66000000),
+                    BlendMode.srcIn,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // 3) Pin asli (crimson)
+          Positioned(
+            left: 0,
+            top: 0,
+            child: SvgPicture.asset(
+              'assets/svg/pin.svg',
+              width: _pinSize,
+              height: _pinSize,
+              fit: BoxFit.contain,
+              colorFilter: const ColorFilter.mode(
+                _crimson,
+                BlendMode.srcIn,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
@@ -196,60 +333,79 @@ class _MapPickerPageState extends State<MapPickerPage> {
       body: Stack(
         children: [
           // ── PETA ──
-          GoogleMap(
-            initialCameraPosition: CameraPosition(target: _center, zoom: 16),
-            onMapCreated: (c) {
-              _map = c;
-              final pending = _pendingCamera;
-              if (pending != null) {
-                _pendingCamera = null;
-                c.animateCamera(CameraUpdate.newLatLngZoom(pending, 17));
-              }
-            },
-            onCameraMoveStarted: () => setState(() => _moving = true),
-            onCameraMove: (p) => _center = p.target,
-            onCameraIdle: () {
-              setState(() => _moving = false);
-              _debounce?.cancel();
-              _debounce = Timer(
-                const Duration(milliseconds: 500),
-                () => _fetchAddress(_center),
-              );
-            },
-            // Titik biru lokasi Google dimatikan: karena menempel pada
-            // koordinat GPS, titik itu ikut bergeser setiap kali zoom
-            // in/out — membingungkan di halaman pemilih peta. Posisi
-            // pemakaian tetap terlihat lewat pin tengah, dan tombol
-            // "lokasi saya" tetap bisa melompat ke GPS.
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            compassEnabled: false,
-            padding: const EdgeInsets.only(bottom: 260),
-          ),
-
-          // ── PIN TENGAH ──
-          Positioned.fill(
-            bottom: 260,
-            child: IgnorePointer(
-              child: Center(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  transform: Matrix4.translationValues(0, _moving ? -14 : 0, 0),
-                  child: const Padding(
-                    padding: EdgeInsets.only(bottom: 44),
-                    child: Icon(Icons.location_on, size: 52, color: AppColors.primary),
+          if (!_ready)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Colors.white,
+                child: Center(
+                  child: SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.6,
+                      color: AppColors.primary,
+                    ),
                   ),
                 ),
               ),
+            )
+          else
+            Listener(
+              onPointerDown: _onPointerDown,
+              onPointerMove: _onPointerMove,
+              onPointerUp: _onPointerUp,
+              onPointerCancel: _onPointerUp,
+              child: GoogleMap(
+                initialCameraPosition:
+                    CameraPosition(target: _center, zoom: 16),
+                onMapCreated: (c) {
+                  _map = c;
+                  final pending = _pendingCamera;
+                  if (pending != null) {
+                    _pendingCamera = null;
+                    c.animateCamera(CameraUpdate.newLatLngZoom(pending, 17));
+                  }
+                },
+                onCameraMove: (p) {
+                  _center = p.target;
+                  _zoom = p.zoom; // simpan zoom terbaru untuk pinch kustom
+                },
+                onCameraIdle: () {
+                  _debounce?.cancel();
+                  _debounce = Timer(
+                    const Duration(milliseconds: 500),
+                    () => _fetchAddress(_center),
+                  );
+                },
+                // Zoom bawaan dimatikan (pusatnya di jari). Zoom ditangani
+                // Listener di atas → target kamera tidak berubah saat zoom.
+                zoomGesturesEnabled: false,
+                // Saat 2 jari (zoom), geser dimatikan agar target tetap.
+                scrollGesturesEnabled: !_multiTouch,
+                myLocationEnabled: true,
+                myLocationButtonEnabled: false, // sudah ada tombol GPS sendiri
+                zoomControlsEnabled: false,
+                mapToolbarEnabled: false,
+                compassEnabled: false,
+                padding: const EdgeInsets.only(bottom: _sheetHeight),
+              ),
+            ),
+
+          // ── PIN TENGAH (dengan bayangan) ──
+          // Digambar aplikasi (bukan marker Google), diam di tengah layar.
+          // Kotak pin setinggi 2x ukuran pin, jadi ujung pin persis di
+          // titik tengah = titik kamera.
+          Positioned.fill(
+            bottom: _sheetHeight,
+            child: IgnorePointer(
+              child: Center(child: _buildPin()),
             ),
           ),
 
           // ── TOMBOL GPS ──
           Positioned(
             right: 14,
-            bottom: 260 + 14,
+            bottom: _sheetHeight + 14,
             child: _RoundBtn(
               icon: Icons.my_location,
               busy: _locating,
@@ -290,121 +446,72 @@ class _MapPickerPageState extends State<MapPickerPage> {
                     child: Container(
                       width: 38,
                       height: 4,
-                      margin: const EdgeInsets.only(bottom: 14),
+                      margin: const EdgeInsets.only(bottom: 16),
                       decoration: BoxDecoration(
                         color: const Color(0xFFE3E8EE),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
-                  const Text(
+                  Text(
                     'Konfirmasi Lokasi',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1D2733),
+                    style: GoogleFonts.poppins(
+                      fontSize: 19,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF1D2733),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFE3E8EE)),
-                      borderRadius: BorderRadius.circular(14),
+                  const SizedBox(height: 18),
+                  // ── DETAIL LOKASI ──
+                  if (_loading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8),
+                      child: LinearProgressIndicator(
+                        color: AppColors.primary,
+                        minHeight: 3,
+                      ),
+                    )
+                  else ...[
+                    Text(
+                      _title,
+                      style: GoogleFonts.poppins(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF1D2733),
+                      ),
                     ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 38,
-                          height: 38,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFFE6F2FC),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.location_on,
-                              color: AppColors.primary, size: 20),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _loading
-                              ? const Padding(
-                                  padding: EdgeInsets.symmetric(vertical: 10),
-                                  child: LinearProgressIndicator(
-                                    color: AppColors.primary,
-                                    minHeight: 3,
-                                  ),
-                                )
-                              : Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      _title,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w700,
-                                        color: const Color(0xFF1D2733),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _address,
-                                      style: GoogleFonts.poppins(
-                                        fontSize: 12.5,
-                                        height: 1.45,
-                                        color: const Color(0xFF6B7785),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ],
+                    const SizedBox(height: 6),
+                    Text(
+                      _address,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        height: 1.5,
+                        color: const Color(0xFF6B7785),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                  ],
                   if (!_loading && !_hasAddress) ...[
+                    const SizedBox(height: 10),
                     Text(
                       'Alamat untuk titik ini belum ditemukan — geser pin '
                       'sedikit lalu tunggu sebentar.',
                       style: GoogleFonts.poppins(
-                        fontSize: 12,
+                        fontSize: 12.5,
                         height: 1.4,
                         color: const Color(0xFFB45309),
                       ),
                     ),
-                    const SizedBox(height: 10),
                   ],
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor:
-                            AppColors.primary.withValues(alpha: 0.45),
-                        disabledForegroundColor: Colors.white,
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      onPressed: (_loading || !_hasAddress)
-                          ? null
-                          : () => _controller.confirmMapAddress(
-                                _address,
-                                _center.latitude,
-                                _center.longitude,
-                              ),
-                      child: Text(
-                        'PILIH LOKASI INI',
-                        style: GoogleFonts.poppins(
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.3,
-                        ),
-                      ),
-                    ),
+                  const SizedBox(height: 24),
+                  PrimaryButton(
+                    label: 'Konfirmasi',
+                    onPressed: (_loading || !_hasAddress)
+                        ? null
+                        : () => _controller.confirmMapAddress(
+                              _address,
+                              _center.latitude,
+                              _center.longitude,
+                            ),
                   ),
                 ],
               ),
@@ -415,6 +522,9 @@ class _MapPickerPageState extends State<MapPickerPage> {
     );
   }
 }
+
+/// Warna pin tengah peta — pin.svg di-recolor crimson.
+const _crimson = Color(0xFFE2195E);
 
 const _shadow = [
   BoxShadow(color: Color(0x38000000), blurRadius: 8, offset: Offset(0, 2)),
