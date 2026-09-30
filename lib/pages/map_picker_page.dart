@@ -1,19 +1,29 @@
 import 'dart:async';
-import 'dart:math' as math;
-import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 import '../app/controllers/address_picker_controller.dart';
-import '../app/config/prefs_keys.dart';
+import '../app/services/initial_position.dart';
 import '../app/services/reverse_geocoder.dart';
 import '../app/theme/app_colors.dart';
-import '../widgets/primary_button.dart';
+import '../app/utils/pinch_zoom.dart';
+import '../widgets/confirm_location_sheet.dart';
+import '../widgets/map_pin.dart';
+import '../widgets/round_map_button.dart';
 
+/// Halaman pilih alamat di peta: pin diam di tengah layar, peta yang
+/// digerakkan di belakangnya, lalu sheet konfirmasi di bawah.
+///
+/// UI-nya dipecah ke file terpisah supaya halaman ini fokus ke alur:
+///   * [MapPin]                 → pin tengah + bayangannya
+///   * [ConfirmLocationSheet]   → sheet detail lokasi + tombol konfirmasi
+///   * [RoundMapButton]         → tombol bundar (GPS, kembali)
+///   * `resolveInitialPosition` → menentukan titik awal peta
+///   * [PinchZoomController]    → zoom dua jari yang menjaga target tetap
 class MapPickerPage extends StatefulWidget {
   const MapPickerPage({super.key});
 
@@ -24,14 +34,7 @@ class MapPickerPage extends StatefulWidget {
 class _MapPickerPageState extends State<MapPickerPage> {
   GoogleMapController? _map;
 
-  /// Posisi cadangan: lokasi saat ini → alamat terakhir dipilih → pusat kota.
-  static const _fallbackCenter = LatLng(-7.7956, 110.3695);
-
-  /// Ukuran pin & tinggi area bottom sheet (dipakai bersama supaya sinkron).
-  static const double _pinSize = 35;
-  static const double _sheetHeight = 260;
-
-  LatLng _center = _fallbackCenter;
+  LatLng _center = kFallbackCenter;
   LatLng? _pendingCamera;
   String _title = 'Memuat lokasi...';
   String _address = '';
@@ -47,12 +50,8 @@ class _MapPickerPageState extends State<MapPickerPage> {
   bool _locating = false;
   Timer? _debounce;
 
-  // ── State pinch-zoom kustom (zoom selalu berpusat di tengah layar) ──
-  final Map<int, Offset> _pointers = {};
-  double _zoom = 16;
-  double? _startDist;
-  double _startZoom = 16;
-  bool _multiTouch = false;
+  /// Zoom dua jari berpusat di tengah layar (lihat pinch_zoom.dart).
+  final _pinch = PinchZoomController();
 
   final _controller = Get.find<AddressPickerController>();
 
@@ -64,7 +63,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
 
   /// Buka peta di lokasi Anda — bukan di koordinat hardcode.
   Future<void> _initPosition() async {
-    final target = await _resolveInitialPosition();
+    final target = await resolveInitialPosition();
     if (!mounted) return;
     setState(() {
       _center = target;
@@ -72,32 +71,6 @@ class _MapPickerPageState extends State<MapPickerPage> {
     });
     _moveCamera(target);
     await _fetchAddress(target);
-  }
-
-  Future<LatLng> _resolveInitialPosition() async {
-    // 1) Lokasi saat ini (maks 6 detik).
-    try {
-      final coords = await currentCoordinates().timeout(
-        const Duration(seconds: 6),
-        onTimeout: () => null,
-      );
-      if (coords != null) return LatLng(coords.lat, coords.lng);
-    } catch (e) {
-      debugPrint('>>> ambil lokasi awal: $e');
-    }
-
-    // 2) Lokasi terakhir yang pernah dipilih user.
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final lat = prefs.getDouble(PrefsKeys.selectedLat);
-      final lng = prefs.getDouble(PrefsKeys.selectedLng);
-      if (lat != null && lng != null) return LatLng(lat, lng);
-    } catch (e) {
-      debugPrint('>>> baca lokasi tersimpan gagal: $e');
-    }
-
-    // 3) Terakhir: pusat default.
-    return _fallbackCenter;
   }
 
   void _moveCamera(LatLng target) {
@@ -117,40 +90,21 @@ class _MapPickerPageState extends State<MapPickerPage> {
   }
 
   // ───────────────────────── PINCH ZOOM KUSTOM ─────────────────────────
-  // Zoom bawaan Google Maps berpusat di titik jari, sehingga target kamera
-  // (lokasi di bawah pin) ikut bergeser. Di sini zoom ditangani sendiri
-  // dengan CameraUpdate.zoomTo, yang menjaga target kamera tetap.
-
-  double _dist() {
-    final p = _pointers.values.toList();
-    return (p[0] - p[1]).distance;
-  }
+  // Hitungannya ada di PinchZoomController; di sini cuma meneruskan event
+  // jari ke kamera. Zoom bawaan Google Maps dimatikan karena berpusat di
+  // titik jari (target kamera ikut bergeser).
 
   void _onPointerDown(PointerDownEvent e) {
-    _pointers[e.pointer] = e.position;
-    if (_pointers.length == 2) {
-      _startDist = _dist();
-      _startZoom = _zoom;
-      setState(() => _multiTouch = true); // 2 jari = zoom saja, tanpa geser
-    }
+    if (_pinch.pointerDown(e.pointer, e.position)) setState(() {});
   }
 
   void _onPointerMove(PointerMoveEvent e) {
-    if (!_pointers.containsKey(e.pointer)) return;
-    _pointers[e.pointer] = e.position;
-    if (_pointers.length == 2 && _startDist != null && _startDist! > 0) {
-      final z = (_startZoom + math.log(_dist() / _startDist!) / math.ln2)
-          .clamp(3.0, 21.0);
-      _map?.moveCamera(CameraUpdate.zoomTo(z));
-    }
+    final zoom = _pinch.pointerMove(e.pointer, e.position);
+    if (zoom != null) _map?.moveCamera(CameraUpdate.zoomTo(zoom));
   }
 
   void _onPointerUp(PointerEvent e) {
-    _pointers.remove(e.pointer);
-    if (_pointers.length < 2) {
-      _startDist = null;
-      if (_multiTouch) setState(() => _multiTouch = false);
-    }
+    if (_pinch.pointerUp(e.pointer)) setState(() {});
   }
 
   // ───────────────────────── LOKASI SAYA ─────────────────────────
@@ -231,6 +185,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
       );
   }
 
+  /// Ambil alamat untuk titik yang sedang dituju, lalu tampilkan di sheet.
   Future<void> _fetchAddress(LatLng pos) async {
     setState(() {
       _center = pos;
@@ -251,67 +206,9 @@ class _MapPickerPageState extends State<MapPickerPage> {
     }
   }
 
-  // ───────────────────────── PIN + BAYANGAN ─────────────────────────
-  // Kotak berukuran (_pinSize x _pinSize*2), dipusatkan di layar peta.
-  // Setengah atas = pin, ujung pin tepat di tengah kotak = titik kamera.
-  // Lapisan (bawah → atas):
-  //   1) bayangan — bentuknya persis siluet icon SVG (bukan oval/tanah),
-  //      di-blur lalu digeser sedikit supaya terbaca sebagai bayangan
-  //      jatuh dari icon-nya sendiri
-  //   2) pin asli
-  Widget _buildPin() {
-    return SizedBox(
-      width: _pinSize,
-      height: _pinSize * 2,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // 1) Bayangan siluet icon SVG (blur + geser halus)
-          Positioned(
-            left: 0,
-            top: 0,
-            child: Transform.translate(
-              offset: const Offset(1.5, 2.5),
-              child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 3.2, sigmaY: 3.2),
-                child: SvgPicture.asset(
-                  'assets/svg/pin.svg',
-                  width: _pinSize,
-                  height: _pinSize,
-                  fit: BoxFit.contain,
-                  colorFilter: const ColorFilter.mode(
-                    Color(0x59000000),
-                    BlendMode.srcIn,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // 2) Pin asli (crimson)
-          Positioned(
-            left: 0,
-            top: 0,
-            child: SvgPicture.asset(
-              'assets/svg/pin.svg',
-              width: _pinSize,
-              height: _pinSize,
-              fit: BoxFit.contain,
-              colorFilter: const ColorFilter.mode(
-                _crimson,
-                BlendMode.srcIn,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final top = MediaQuery.of(context).padding.top;
-    final bottom = MediaQuery.of(context).padding.bottom;
 
     return Scaffold(
       body: Stack(
@@ -352,7 +249,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
                 },
                 onCameraMove: (p) {
                   _center = p.target;
-                  _zoom = p.zoom; // simpan zoom terbaru untuk pinch kustom
+                  _pinch.zoom = p.zoom; // simpan zoom terbaru untuk pinch
                 },
                 onCameraIdle: () {
                   _debounce?.cancel();
@@ -362,35 +259,33 @@ class _MapPickerPageState extends State<MapPickerPage> {
                   );
                 },
                 // Zoom bawaan dimatikan (pusatnya di jari). Zoom ditangani
-                // Listener di atas → target kamera tidak berubah saat zoom.
+                // _onPointer* di atas → target kamera tidak berubah saat zoom.
                 zoomGesturesEnabled: false,
                 // Saat 2 jari (zoom), geser dimatikan agar target tetap.
-                scrollGesturesEnabled: !_multiTouch,
+                scrollGesturesEnabled: !_pinch.multiTouch,
                 myLocationEnabled: true,
                 myLocationButtonEnabled: false, // sudah ada tombol GPS sendiri
                 zoomControlsEnabled: false,
                 mapToolbarEnabled: false,
                 compassEnabled: false,
-                padding: const EdgeInsets.only(bottom: _sheetHeight),
+                padding: const EdgeInsets.only(bottom: kConfirmSheetHeight),
               ),
             ),
 
-          // ── PIN TENGAH (dengan bayangan) ──
+          // ── PIN TENGAH ──
           // Digambar aplikasi (bukan marker Google), diam di tengah layar.
           // Kotak pin setinggi 2x ukuran pin, jadi ujung pin persis di
           // titik tengah = titik kamera.
           Positioned.fill(
-            bottom: _sheetHeight,
-            child: IgnorePointer(
-              child: Center(child: _buildPin()),
-            ),
+            bottom: kConfirmSheetHeight,
+            child: const IgnorePointer(child: Center(child: MapPin())),
           ),
 
           // ── TOMBOL GPS ──
           Positioned(
             right: 14,
-            bottom: _sheetHeight + 14,
-            child: _RoundBtn(
+            bottom: kConfirmSheetHeight + 14,
+            child: RoundMapButton(
               icon: Icons.my_location,
               busy: _locating,
               onTap: _goToMyLocation,
@@ -401,7 +296,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
           Positioned(
             top: top + 12,
             left: 14,
-            child: _RoundBtn(icon: Icons.arrow_back, onTap: () => Get.back()),
+            child: RoundMapButton(icon: Icons.arrow_back, onTap: () => Get.back()),
           ),
 
           // ── BOTTOM SHEET ──
@@ -409,141 +304,19 @@ class _MapPickerPageState extends State<MapPickerPage> {
             left: 0,
             right: 0,
             bottom: 0,
-            child: Container(
-              padding: EdgeInsets.fromLTRB(20, 10, 20, 20 + bottom),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                boxShadow: [
-                  BoxShadow(
-                    color: Color(0x26000000),
-                    blurRadius: 24,
-                    offset: Offset(0, -6),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 38,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE3E8EE),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  Text(
-                    'Konfirmasi Lokasi',
-                    style: GoogleFonts.poppins(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF1D2733),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  // ── DETAIL LOKASI ──
-                  if (_loading)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8),
-                      child: LinearProgressIndicator(
-                        color: AppColors.primary,
-                        minHeight: 3,
-                      ),
-                    )
-                  else ...[
-                    Text(
-                      _title,
-                      style: GoogleFonts.poppins(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF1D2733),
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _address,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        height: 1.5,
-                        color: const Color(0xFF6B7785),
-                      ),
-                    ),
-                  ],
-                  if (!_loading && !_hasAddress) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      'Alamat untuk titik ini belum ditemukan — geser pin '
-                      'sedikit lalu tunggu sebentar.',
-                      style: GoogleFonts.poppins(
-                        fontSize: 12.5,
-                        height: 1.4,
-                        color: const Color(0xFFB45309),
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 24),
-                  PrimaryButton(
-                    label: 'Konfirmasi',
-                    onPressed: (_loading || !_hasAddress)
-                        ? null
-                        : () => _controller.confirmMapAddress(
-                              _address,
-                              _center.latitude,
-                              _center.longitude,
-                            ),
-                  ),
-                ],
+            child: ConfirmLocationSheet(
+              title: _title,
+              address: _address,
+              loading: _loading,
+              hasAddress: _hasAddress,
+              onConfirm: () => _controller.confirmMapAddress(
+                _address,
+                _center.latitude,
+                _center.longitude,
               ),
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// Warna pin tengah peta — pin.svg di-recolor crimson.
-const _crimson = Color(0xFFE2195E);
-
-const _shadow = [
-  BoxShadow(color: Color(0x38000000), blurRadius: 8, offset: Offset(0, 2)),
-];
-
-class _RoundBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  /// true → tampilkan spinner (lagi mengambil lokasi GPS).
-  final bool busy;
-
-  const _RoundBtn({required this.icon, required this.onTap, this.busy = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: busy ? null : onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: _shadow,
-        ),
-        child: busy
-            ? const Padding(
-                padding: EdgeInsets.all(12),
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: AppColors.primary,
-                ),
-              )
-            : Icon(icon, size: 21, color: const Color(0xFF1D2733)),
       ),
     );
   }
