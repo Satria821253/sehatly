@@ -162,6 +162,11 @@ class AddressPickerController extends GetxController {
         await prefs.setDouble(PrefsKeys.selectedLng, lng);
       }
       await prefs.setBool(PrefsKeys.manualAddressSet, true);
+      // User sampai home lewat pemilih alamat → tandai "pernah sampai
+      // home", supaya splash menampilkan intro "Penggunaan Data & Izin"
+      // pada kunjungan berikutnya (bukan hanya untuk yang memberi izin
+      // lokasi).
+      await prefs.setBool(PrefsKeys.hasReachedHome, true);
     } catch (e) {
       // Penyimpanan penuh/bermasalah → jangan pindah halaman, user tetap
       // di sheet dan bisa menekan item yang sama sekali lagi.
@@ -198,6 +203,9 @@ class AddressPickerController extends GetxController {
       await prefs.setDouble(PrefsKeys.selectedLat, lat);
       await prefs.setDouble(PrefsKeys.selectedLng, lon);
       await prefs.setBool(PrefsKeys.manualAddressSet, true);
+      // Sama seperti pencarian: sampai home dari peta juga menandai bahwa
+      // intro izin belum/bisa ditampilkan di kunjungan berikutnya.
+      await prefs.setBool(PrefsKeys.hasReachedHome, true);
     } catch (e) {
       // Gagal menyimpan → tetap di peta supaya tombol bisa ditekan lagi.
       debugPrint('>>> gagal simpan alamat (peta): $e');
