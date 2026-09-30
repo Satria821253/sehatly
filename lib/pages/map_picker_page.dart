@@ -1,9 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../app/controllers/address_picker_controller.dart';
@@ -12,12 +10,10 @@ import '../app/services/reverse_geocoder.dart';
 import '../app/theme/app_colors.dart';
 import '../app/utils/pinch_zoom.dart';
 import '../widgets/confirm_location_sheet.dart';
+import '../widgets/error_message.dart';
 import '../widgets/map_pin.dart';
 import '../widgets/round_map_button.dart';
 
-/// Halaman pilih alamat di peta: pin diam di tengah layar, peta yang
-/// digerakkan di belakangnya, lalu sheet konfirmasi di bawah.
-///
 /// UI-nya dipecah ke file terpisah supaya halaman ini fokus ke alur:
 ///   * [MapPin]                 → pin tengah + bayangannya
 ///   * [ConfirmLocationSheet]   → sheet detail lokasi + tombol konfirmasi
@@ -90,9 +86,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
   }
 
   // ───────────────────────── PINCH ZOOM KUSTOM ─────────────────────────
-  // Hitungannya ada di PinchZoomController; di sini cuma meneruskan event
-  // jari ke kamera. Zoom bawaan Google Maps dimatikan karena berpusat di
-  // titik jari (target kamera ikut bergeser).
+
 
   void _onPointerDown(PointerDownEvent e) {
     if (_pinch.pointerDown(e.pointer, e.position)) setState(() {});
@@ -116,7 +110,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
       final coords = await currentCoordinates();
       if (!mounted) return;
       if (coords == null) {
-        await _explainGpsUnavailable();
+        await showGpsUnavailableMessage(context);
         return;
       }
       final latlng = LatLng(coords.lat, coords.lng);
@@ -125,64 +119,6 @@ class _MapPickerPageState extends State<MapPickerPage> {
     } finally {
       if (mounted) setState(() => _locating = false);
     }
-  }
-
-  /// GPS tidak bisa diambil → beri tahu penyebabnya + jalan pintas ke
-  /// pengaturan yang tepat (izin lokasi / sakelar layanan lokasi).
-  Future<void> _explainGpsUnavailable() async {
-    String message = 'Lokasi perangkat belum tersedia, coba lagi sebentar.';
-    String? actionLabel;
-    Future<void> Function()? openSettings;
-
-    try {
-      final serviceOn = await Geolocator.isLocationServiceEnabled();
-      final permission = await Geolocator.checkPermission();
-      final hasPermission =
-          permission == LocationPermission.whileInUse ||
-          permission == LocationPermission.always;
-
-      if (!hasPermission) {
-        message =
-            'Izin lokasi belum diberikan — beri izin dulu supaya tombol '
-            'ini bisa membawa peta ke lokasi Anda.';
-        actionLabel = 'BUKA PENGATURAN';
-        openSettings = Geolocator.openAppSettings;
-      } else if (!serviceOn) {
-        message = 'Lokasi perangkat (GPS) sedang dimatikan.';
-        actionLabel = 'NYALAKAN';
-        openSettings = Geolocator.openLocationSettings;
-      }
-    } catch (_) {
-      // pesan default tetap dipakai
-    }
-
-    _toast(message, actionLabel: actionLabel, onAction: openSettings);
-  }
-
-  void _toast(
-    String message, {
-    String? actionLabel,
-    Future<void> Function()? onAction,
-  }) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 5),
-          content: Text(
-            message,
-            style: GoogleFonts.poppins(fontSize: 13, height: 1.4),
-          ),
-          action: actionLabel == null
-              ? null
-              : SnackBarAction(
-                  label: actionLabel,
-                  onPressed: () => onAction?.call(),
-                ),
-        ),
-      );
   }
 
   /// Ambil alamat untuk titik yang sedang dituju, lalu tampilkan di sheet.
@@ -258,8 +194,6 @@ class _MapPickerPageState extends State<MapPickerPage> {
                     () => _fetchAddress(_center),
                   );
                 },
-                // Zoom bawaan dimatikan (pusatnya di jari). Zoom ditangani
-                // _onPointer* di atas → target kamera tidak berubah saat zoom.
                 zoomGesturesEnabled: false,
                 // Saat 2 jari (zoom), geser dimatikan agar target tetap.
                 scrollGesturesEnabled: !_pinch.multiTouch,
@@ -272,10 +206,6 @@ class _MapPickerPageState extends State<MapPickerPage> {
               ),
             ),
 
-          // ── PIN TENGAH ──
-          // Digambar aplikasi (bukan marker Google), diam di tengah layar.
-          // Kotak pin setinggi 2x ukuran pin, jadi ujung pin persis di
-          // titik tengah = titik kamera.
           Positioned.fill(
             bottom: kConfirmSheetHeight,
             child: const IgnorePointer(child: Center(child: MapPin())),
