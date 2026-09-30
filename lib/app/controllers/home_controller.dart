@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../pages/address_picker_page.dart';
+import '../../widgets/error_message.dart';
 import '../config/prefs_keys.dart';
 import '../services/reverse_geocoder.dart';
 
@@ -29,6 +30,7 @@ class HomeController extends GetxController {
       lng.value = prefs.getDouble(PrefsKeys.selectedLng);
     } catch (e) {
       debugPrint('Gagal memuat alamat: $e');
+      showSnackFromGlobal(showAddressLoadFailedSnack);
     } finally {
       isLoading.value = false;
     }
@@ -57,6 +59,7 @@ class HomeController extends GetxController {
         await prefs.setDouble(PrefsKeys.selectedLng, lo);
       } catch (e) {
         debugPrint('Gagal menyimpan koordinat: $e');
+        showSnackFromGlobal(showAddressSaveFailedSnack);
       }
     }
 
@@ -69,6 +72,7 @@ class HomeController extends GetxController {
       await prefs.setString(PrefsKeys.selectedAddress, found);
     } catch (e) {
       debugPrint('Gagal menyimpan alamat: $e');
+      showSnackFromGlobal(showAddressSaveFailedSnack);
     }
   }
 

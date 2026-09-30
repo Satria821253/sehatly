@@ -7,7 +7,9 @@ import '../config/prefs_keys.dart';
 import '../routes/app_routes.dart';
 import '../services/google_geocoding_service.dart';
 import '../services/google_places_service.dart';
+import '../services/network_status.dart';
 import '../services/nominatim_service.dart';
+import '../../widgets/error_message.dart';
 
 class AddressPickerController extends GetxController {
   final _places = GooglePlacesService();
@@ -29,6 +31,11 @@ class AddressPickerController extends GetxController {
   /// supaya hasil pencarian lama tidak menimpa yang baru.
   int _requestSeq = 0;
 
+  /// true = kartu "tidak ada internet" sudah tampil untuk sesi pencarian
+  /// ini (di-reset tiap kali query dikosongkan atau hasil berhasil
+  /// ditemukan) supaya tidak berulang tiap ketikan.
+  bool _offlineNotified = false;
+
   @override
   void onClose() {
     _debounce?.cancel();
@@ -44,6 +51,7 @@ class AddressPickerController extends GetxController {
       isLoading.value = false;
       results.clear();
       _places.endSession();
+      _offlineNotified = false;
       return;
     }
     _places.startSession();
@@ -67,6 +75,20 @@ class AddressPickerController extends GetxController {
       debugPrint('Fallback pencarian alamat ke OpenStreetMap');
       found = await _osm.search(q);
       if (seq != _requestSeq) return;
+    }
+
+    // Hasil kosong bisa berarti "memang tidak ada yang cocok" atau
+    // "internet mati" — cek jaringan dulu supaya user tidak bingung
+    // melihat daftar kosong tanpa penjelasan.
+    if (found.isEmpty) {
+      final online = await hasInternetConnection();
+      if (seq != _requestSeq) return;
+      if (!online && !_offlineNotified) {
+        _offlineNotified = true;
+        showSnackFromGlobal(showNoInternetSnack);
+      }
+    } else {
+      _offlineNotified = false; // berhasil → kartu boleh muncul lagi nanti
     }
 
     results.assignAll(found);
@@ -122,15 +144,26 @@ class AddressPickerController extends GetxController {
         fromGoogle ? await _geocoding.fromPlaceId(address.placeId!) : null;
     final resolved = detail ?? address;
 
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(PrefsKeys.selectedAddress, resolved.full);
-    final lat = resolved.lat;
-    final lng = resolved.lng;
-    if (lat != null && lng != null) {
-      await prefs.setDouble(PrefsKeys.selectedLat, lat);
-      await prefs.setDouble(PrefsKeys.selectedLng, lng);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(PrefsKeys.selectedAddress, resolved.full);
+      final lat = resolved.lat;
+      final lng = resolved.lng;
+      if (lat != null && lng != null) {
+        await prefs.setDouble(PrefsKeys.selectedLat, lat);
+        await prefs.setDouble(PrefsKeys.selectedLng, lng);
+      }
+      await prefs.setBool(PrefsKeys.manualAddressSet, true);
+    } catch (e) {
+      // Penyimpanan penuh/bermasalah → jangan pindah halaman, user tetap
+      // di sheet dan bisa menekan item yang sama sekali lagi.
+      debugPrint('>>> gagal simpan alamat: $e');
+      _places.endSession();
+      isLoading.value = false;
+      isSelecting.value = false;
+      showSnackFromGlobal(showAddressSaveFailedSnack);
+      return;
     }
-    await prefs.setBool(PrefsKeys.manualAddressSet, true);
 
     _places.endSession();
     isLoading.value = false;
@@ -151,11 +184,18 @@ class AddressPickerController extends GetxController {
   }
 
   Future<void> confirmMapAddress(String full, double lat, double lon) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(PrefsKeys.selectedAddress, full);
-    await prefs.setDouble(PrefsKeys.selectedLat, lat);
-    await prefs.setDouble(PrefsKeys.selectedLng, lon);
-    await prefs.setBool(PrefsKeys.manualAddressSet, true);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(PrefsKeys.selectedAddress, full);
+      await prefs.setDouble(PrefsKeys.selectedLat, lat);
+      await prefs.setDouble(PrefsKeys.selectedLng, lon);
+      await prefs.setBool(PrefsKeys.manualAddressSet, true);
+    } catch (e) {
+      // Gagal menyimpan → tetap di peta supaya tombol bisa ditekan lagi.
+      debugPrint('>>> gagal simpan alamat (peta): $e');
+      showSnackFromGlobal(showAddressSaveFailedSnack);
+      return;
+    }
     Get.offAllNamed(AppRoutes.home);
   }
 }

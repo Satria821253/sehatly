@@ -68,4 +68,51 @@ void main() {
     // Tidak menumpuk: cukup satu kartu di layar.
     expect(find.text('NYALAKAN'), findsOneWidget);
   });
+
+  /// Layar berisi tombol pemicu untuk fungsi pesan apa pun.
+  Widget hostFor(void Function(BuildContext) show) => MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () => show(context),
+                child: const Text('pemicu'),
+              ),
+            ),
+          ),
+        ),
+      );
+
+  testWidgets('kartu "tidak ada internet" tampil dengan ikon wifi',
+      (tester) async {
+    await tester.pumpWidget(hostFor(showNoInternetSnack));
+    await tester.tap(find.text('pemicu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.textContaining('Tidak ada koneksi internet'), findsOneWidget);
+    expect(find.byIcon(Icons.wifi_off_rounded), findsOneWidget);
+  });
+
+  testWidgets('kartu "gagal simpan alamat" tampil dengan ikon simpan',
+      (tester) async {
+    await tester.pumpWidget(hostFor(showAddressSaveFailedSnack));
+    await tester.tap(find.text('pemicu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.textContaining('Gagal menyimpan alamat'), findsOneWidget);
+    expect(find.byIcon(Icons.save_alt_rounded), findsOneWidget);
+  });
+
+  testWidgets('kartu "gagal muat alamat" tampil dengan ikon peringatan',
+      (tester) async {
+    await tester.pumpWidget(hostFor(showAddressLoadFailedSnack));
+    await tester.tap(find.text('pemicu'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.textContaining('Gagal memuat alamat'), findsOneWidget);
+    expect(find.byIcon(Icons.sync_problem_rounded), findsOneWidget);
+  });
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../app/theme/app_colors.dart';
@@ -113,6 +114,38 @@ void showErrorSnack(
       ),
     );
 }
+
+/// Tampilkan pesan lewat context root aplikasi — untuk pemanggil yang tidak
+/// memegang BuildContext (mis. controller GetX) atau yang berada setelah
+/// `await`. Aman: bila context sudah tidak ada, pesan tidak ditampilkan.
+void showSnackFromGlobal(void Function(BuildContext) show) {
+  final ctx = Get.context;
+  if (ctx != null && ctx.mounted) show(ctx);
+}
+
+/// Tidak ada koneksi internet — pesan untuk alur yang butuh jaringan
+/// (pencarian alamat, reverse geocode di peta).
+void showNoInternetSnack(BuildContext context) => showErrorSnack(
+      context,
+      'Tidak ada koneksi internet — periksa Wi-Fi atau data seluler '
+      'Anda, lalu coba lagi.',
+      icon: Icons.wifi_off_rounded,
+    );
+
+/// Alamat gagal ditulis ke penyimpanan perangkat.
+void showAddressSaveFailedSnack(BuildContext context) => showErrorSnack(
+      context,
+      'Gagal menyimpan alamat di perangkat — coba sekali lagi.',
+      icon: Icons.save_alt_rounded,
+    );
+
+/// Alamat gagal dibaca dari penyimpanan perangkat.
+void showAddressLoadFailedSnack(BuildContext context) => showErrorSnack(
+      context,
+      'Gagal memuat alamat tersimpan — muat ulang halaman untuk mencoba '
+      'lagi.',
+      icon: Icons.sync_problem_rounded,
+    );
 
 /// Handler untuk kondisi GPS yang tidak bisa diambil.
 ///

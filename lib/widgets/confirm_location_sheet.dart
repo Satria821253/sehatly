@@ -20,6 +20,7 @@ class ConfirmLocationSheet extends StatelessWidget {
     required this.loading,
     required this.hasAddress,
     required this.onConfirm,
+    this.offline = false,
   });
 
   /// Nama lokasi (hasil reverse geocode).
@@ -33,6 +34,10 @@ class ConfirmLocationSheet extends StatelessWidget {
 
   /// false → alamat belum ditemukan (catatan tampil, tombol dikunci).
   final bool hasAddress;
+
+  /// true → penyebabnya internet mati, bukan titik yang tidak dikenali
+  /// (catatannya jadi berbeda supaya tidak menyesatkan).
+  final bool offline;
 
   final VoidCallback onConfirm;
 
@@ -109,8 +114,12 @@ class ConfirmLocationSheet extends StatelessWidget {
           if (!loading && !hasAddress) ...[
             const SizedBox(height: 10),
             Text(
-              'Alamat untuk titik ini belum ditemukan — geser pin '
-              'sedikit lalu tunggu sebentar.',
+              offline
+                  ? 'Tidak ada koneksi internet — alamat tidak bisa '
+                      'diambil. Periksa Wi-Fi/data Anda, lalu geser pin '
+                      'untuk mencoba lagi.'
+                  : 'Alamat untuk titik ini belum ditemukan — geser pin '
+                      'sedikit lalu tunggu sebentar.',
               style: GoogleFonts.poppins(
                 fontSize: 12.5,
                 height: 1.4,
