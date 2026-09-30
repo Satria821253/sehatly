@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 
-import '../routes/app_routes.dart';
 import '../services/network_status.dart';
 import 'splash_controller.dart';
 
@@ -65,10 +64,13 @@ class ConnectionCheckController extends GetxController {
 
     // Cek otomatis pertama (langsung setelah splash) → cukup tampilkan
     // tombol. Percobaan user ternyata masih gagal → jangan menahan dia
-    // terus di sini: lanjut ke home mode offline (lihat catatan kelas).
+    // terus di sini: lanjut ke halaman tujuan seperti biasa — user lama
+    // langsung home mode offline, pengguna baru tetap melewati halaman
+    // izin lokasi / intro dulu (logika onboarding tidak boleh terlewat).
     if (_autoCheckFailed) {
-      debugPrint('>>> connection-check: masih mati → home mode offline');
-      Get.offAllNamed(AppRoutes.home);
+      final route = await SplashController.resolveNextRoute();
+      debugPrint('>>> connection-check: masih mati → $route (offline)');
+      Get.offAllNamed(route);
       return;
     }
     _autoCheckFailed = true;

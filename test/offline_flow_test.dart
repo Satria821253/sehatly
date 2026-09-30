@@ -3,6 +3,7 @@
 // sendiri saat internet kembali).
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:sehatly/app/controllers/connection_check_controller.dart';
@@ -225,6 +226,93 @@ void main() {
         expect(find.text('Cek Jaringanmu'), findsNothing);
         expect(find.text(_savedAddress), findsOneWidget);
         expect(find.byType(LottieLoading), findsNothing);
+      },
+    );
+  });
+
+  group('Onboarding tidak terlewat saat offline', () {
+    /// Halaman stub untuk memantau ke mana tujuan navigasi.
+    GetPage stub(String name, String label) => GetPage(
+      name: name,
+      page: () => Scaffold(body: Text(label)),
+    );
+
+    Future<void> pumpGate(WidgetTester tester) async {
+      await tester.pumpWidget(
+        GetMaterialApp(
+          initialRoute: AppRoutes.connectionCheck,
+          getPages: [
+            GetPage(
+              name: AppRoutes.connectionCheck,
+              page: () => const ConnectionCheckPage(),
+            ),
+            stub(AppRoutes.locationPermission, 'HALAMAN IZIN LOKASI'),
+            stub(AppRoutes.permissionIntro, 'HALAMAN INTRO'),
+            stub(AppRoutes.home, 'HALAMAN HOME'),
+          ],
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Coba Lagi'), findsOneWidget);
+    }
+
+    testWidgets(
+      'pengguna baru gagal Coba Lagi → tetap melewati halaman izin lokasi',
+      (tester) async {
+        // Alur pengguna baru memanggil Geolocator untuk menentukan route —
+        // kanalnya tidak ada di `flutter test`, jadi beri mock "izin
+        // ditolak" supaya arah tujuan deterministik (halaman izin lokasi).
+        const channel = MethodChannel('flutter.baseflow.com/geolocator');
+        final messenger =
+            TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+        messenger.setMockMethodCallHandler(channel, (call) async {
+          if (call.method == 'checkPermission') return 0; // denied
+          return null;
+        });
+        addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+
+        SharedPreferences.setMockInitialValues({}); // instalasi baru
+        connectivityProbe = ({
+          Duration timeout = const Duration(seconds: 2),
+        }) async => false;
+        Get.put(ConnectionCheckController());
+
+        await pumpGate(tester);
+
+        await tester.tap(find.text('Coba Lagi'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        // Jangan melompat ke home: onboarding (izin lokasi → intro) harus
+        // tetap dilewati.
+        expect(find.text('HALAMAN IZIN LOKASI'), findsOneWidget);
+        expect(find.text('HALAMAN HOME'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'sudah sampai home tapi intro belum dilihat → tetap ditampilkan',
+      (tester) async {
+        // Pernah sampai home, tapi belum pernah melihat halaman
+        // "Penggunaan Data & Izin".
+        SharedPreferences.setMockInitialValues({
+          'has_reached_home': true,
+          'has_seen_intro': false,
+        });
+        connectivityProbe = ({
+          Duration timeout = const Duration(seconds: 2),
+        }) async => false;
+        Get.put(ConnectionCheckController());
+
+        await pumpGate(tester);
+
+        await tester.tap(find.text('Coba Lagi'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+
+        expect(find.text('HALAMAN INTRO'), findsOneWidget);
+        expect(find.text('HALAMAN HOME'), findsNothing);
       },
     );
   });
