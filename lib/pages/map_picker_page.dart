@@ -255,9 +255,10 @@ class _MapPickerPageState extends State<MapPickerPage> {
   // Kotak berukuran (_pinSize x _pinSize*2), dipusatkan di layar peta.
   // Setengah atas = pin, ujung pin tepat di tengah kotak = titik kamera.
   // Lapisan (bawah → atas):
-  //   1) bayangan oval di tanah (di ujung pin)
-  //   2) bayangan siluet pin (blur, sedikit bergeser)
-  //   3) pin asli
+  //   1) bayangan — bentuknya persis siluet icon SVG (bukan oval/tanah),
+  //      di-blur lalu digeser sedikit supaya terbaca sebagai bayangan
+  //      jatuh dari icon-nya sendiri
+  //   2) pin asli
   Widget _buildPin() {
     return SizedBox(
       width: _pinSize,
@@ -265,38 +266,21 @@ class _MapPickerPageState extends State<MapPickerPage> {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // 1) Bayangan oval di tanah
-          Positioned(
-            left: _pinSize / 2 - 10,
-            top: _pinSize - 3,
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 1.5),
-              child: Container(
-                width: 20,
-                height: 6,
-                decoration: const BoxDecoration(
-                  color: Color(0x59000000),
-                  borderRadius: BorderRadius.all(Radius.elliptical(10, 3)),
-                ),
-              ),
-            ),
-          ),
-
-          // 2) Bayangan siluet pin (hitam transparan + blur)
+          // 1) Bayangan siluet icon SVG (blur + geser halus)
           Positioned(
             left: 0,
             top: 0,
             child: Transform.translate(
-              offset: const Offset(2, 3),
+              offset: const Offset(1.5, 2.5),
               child: ImageFiltered(
-                imageFilter: ImageFilter.blur(sigmaX: 2.2, sigmaY: 2.2),
+                imageFilter: ImageFilter.blur(sigmaX: 3.2, sigmaY: 3.2),
                 child: SvgPicture.asset(
                   'assets/svg/pin.svg',
                   width: _pinSize,
                   height: _pinSize,
                   fit: BoxFit.contain,
                   colorFilter: const ColorFilter.mode(
-                    Color(0x66000000),
+                    Color(0x59000000),
                     BlendMode.srcIn,
                   ),
                 ),
@@ -304,7 +288,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
             ),
           ),
 
-          // 3) Pin asli (crimson)
+          // 2) Pin asli (crimson)
           Positioned(
             left: 0,
             top: 0,
