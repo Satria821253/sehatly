@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../app/controllers/home_controller.dart';
 import '../app/theme/app_colors.dart';
+import '../widgets/lottie_loading.dart';
+import '../widgets/offline_panel.dart';
 
 /// Halaman utama — sapaan di kiri, chip lokasi di POJOK KANAN ATAS,
 /// dan kartu alamat lengkap + koordinat di bawahnya.
@@ -15,47 +17,61 @@ class HomePage extends GetView<HomeController> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FB),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
-          children: [
-            // ── HEADER ── sapaan (kiri) + chip lokasi (kanan atas)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Halo,',
-                        style: GoogleFonts.poppins(
-                          fontSize: 13,
-                          color: const Color(0xFF6B7280),
+        // Mode offline: isi disembunyikan — hanya Lottie loading (grace
+        // beberapa detik) lalu panel "Cek Jaringanmu". Tab bar tetap tampil
+        // karena berada di luar body ini.
+        child: Obx(() {
+          if (controller.offline.value) {
+            if (!controller.offlinePanelVisible.value) {
+              return const Center(child: LottieLoading(size: 200));
+            }
+            return OfflinePanel(
+              onRetry: controller.retryConnection,
+              checking: controller.checkingConnection.value,
+            );
+          }
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+            children: [
+              // ── HEADER ── sapaan (kiri) + chip lokasi (kanan atas)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Halo,',
+                          style: GoogleFonts.poppins(
+                            fontSize: 13,
+                            color: const Color(0xFF6B7280),
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Selamat datang\ndi Sehatly',
-                        style: GoogleFonts.poppins(
-                          fontSize: 18,
-                          height: 1.25,
-                          fontWeight: FontWeight.w700,
-                          color: const Color(0xFF111827),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Selamat datang\ndi Sehatly',
+                          style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            height: 1.25,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF111827),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                const _LocationChip(),
-              ],
-            ),
-            const SizedBox(height: 22),
+                  const SizedBox(width: 12),
+                  const _LocationChip(),
+                ],
+              ),
+              const SizedBox(height: 22),
 
-            // ── KARTU ALAMAT ── alamat lengkap + koordinat
-            const _AddressCard(),
-          ],
-        ),
+              // ── KARTU ALAMAT ── alamat lengkap + koordinat
+              const _AddressCard(),
+            ],
+          );
+        }),
       ),
     );
   }
@@ -202,11 +218,11 @@ class _AddressCard extends StatelessWidget {
                         c.isLoading.value
                             ? 'Memuat alamat...'
                             : (c.address.value.isNotEmpty
-                                ? c.address.value
-                                : (c.coordinateLabel.isNotEmpty
-                                    ? 'Menentukan alamat dari lokasi GPS...'
-                                    : 'Belum ada alamat. Ketuk lokasi di kanan '
-                                        'atas untuk memilih.')),
+                                  ? c.address.value
+                                  : (c.coordinateLabel.isNotEmpty
+                                        ? 'Menentukan alamat dari lokasi GPS...'
+                                        : 'Belum ada alamat. Ketuk lokasi di kanan '
+                                              'atas untuk memilih.')),
                         style: GoogleFonts.poppins(
                           fontSize: 13.5,
                           height: 1.5,
@@ -223,7 +239,11 @@ class _AddressCard extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  const Icon(Icons.my_location, size: 14, color: Color(0xFF9CA3AF)),
+                  const Icon(
+                    Icons.my_location,
+                    size: 14,
+                    color: Color(0xFF9CA3AF),
+                  ),
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(

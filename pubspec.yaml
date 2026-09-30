@@ -46,6 +46,7 @@ dependencies:
   flutter_map: ^8.1.1
   latlong2: ^0.9.1
   google_maps_flutter: ^2.10.0
+  lottie: ^3.6.1
 
 dev_dependencies:
   flutter_test:
@@ -73,6 +74,7 @@ flutter:
   assets:
     - assets/svg/
     - assets/images/
+    - assets/lottie/
 
   # Poppins dibundel ke dalam aplikasi (4 varian yang dipakai UI):
   # - teks tetap Poppins walau HP sedang offline — google_fonts tidak perlu

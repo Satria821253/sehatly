@@ -1,5 +1,6 @@
 abstract class AppRoutes {
   static const splash = '/splash';
+  static const connectionCheck = '/connection-check';
   static const permissionIntro = '/permission-intro';
   static const locationPermission = '/location-permission';
   static const addressPicker = '/address-picker';

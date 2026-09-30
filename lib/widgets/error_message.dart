@@ -123,29 +123,20 @@ void showSnackFromGlobal(void Function(BuildContext) show) {
   if (ctx != null && ctx.mounted) show(ctx);
 }
 
-/// Tidak ada koneksi internet — pesan untuk alur yang butuh jaringan
-/// (pencarian alamat, reverse geocode di peta).
-void showNoInternetSnack(BuildContext context) => showErrorSnack(
-      context,
-      'Tidak ada koneksi internet — periksa Wi-Fi atau data seluler '
-      'Anda, lalu coba lagi.',
-      icon: Icons.wifi_off_rounded,
-    );
-
 /// Alamat gagal ditulis ke penyimpanan perangkat.
 void showAddressSaveFailedSnack(BuildContext context) => showErrorSnack(
-      context,
-      'Gagal menyimpan alamat di perangkat — coba sekali lagi.',
-      icon: Icons.save_alt_rounded,
-    );
+  context,
+  'Gagal menyimpan alamat di perangkat — coba sekali lagi.',
+  icon: Icons.save_alt_rounded,
+);
 
 /// Alamat gagal dibaca dari penyimpanan perangkat.
 void showAddressLoadFailedSnack(BuildContext context) => showErrorSnack(
-      context,
-      'Gagal memuat alamat tersimpan — muat ulang halaman untuk mencoba '
-      'lagi.',
-      icon: Icons.sync_problem_rounded,
-    );
+  context,
+  'Gagal memuat alamat tersimpan — muat ulang halaman untuk mencoba '
+  'lagi.',
+  icon: Icons.sync_problem_rounded,
+);
 
 /// Handler untuk kondisi GPS yang tidak bisa diambil.
 ///

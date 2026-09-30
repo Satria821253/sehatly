@@ -132,23 +132,11 @@ Future<void> _capture(
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400)); // animasi masuk
 
-  await expectLater(
-    find.byType(Scaffold),
-    matchesGoldenFile(golden),
-  );
+  await expectLater(find.byType(Scaffold), matchesGoldenFile(golden));
 }
 
 void main() {
   setUpAll(_loadIcons);
-
-  testWidgets('kartu tidak ada internet', (tester) async {
-    await _capture(
-      tester,
-      'Cari alamat (offline)',
-      showNoInternetSnack,
-      'goldens/kartu_tidak_ada_internet.png',
-    );
-  });
 
   testWidgets('kartu gagal simpan alamat', (tester) async {
     await _capture(
@@ -175,7 +163,7 @@ void main() {
       (context) => showErrorSnack(
         context,
         'Izin lokasi belum diberikan — beri izin dulu supaya tombol '
-            'ini bisa membawa peta ke lokasi Anda.',
+        'ini bisa membawa peta ke lokasi Anda.',
         icon: Icons.lock_outline_rounded,
         actionLabel: 'BUKA PENGATURAN',
         onAction: () {},

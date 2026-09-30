@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../pages/address_picker_page.dart';
 import '../../widgets/error_message.dart';
 import '../config/prefs_keys.dart';
+import '../services/network_status.dart';
 import '../services/reverse_geocoder.dart';
 
 class HomeController extends GetxController {
@@ -15,10 +18,79 @@ class HomeController extends GetxController {
   final lng = Rxn<double>();
   final isLoading = true.obs;
 
+  /// true → tidak ada internet. Isi halaman disembunyikan dan hanya
+  /// Lottie loading yang tampil (tab bar tetap hidup, seperti Halodoc).
+  final offline = false.obs;
+
+  /// true → masa tenggang Lottie lewat tapi koneksi belum juga pulih →
+  /// tampilkan panel "Cek Jaringanmu" + tombol Coba Lagi.
+  final offlinePanelVisible = false.obs;
+
+  /// true → sedang memeriksa koneksi (ditekan dari tombol Coba Lagi).
+  final checkingConnection = false.obs;
+
+  Timer? _pollTimer;
+  Timer? _graceTimer;
+
+  /// Lottie tampil dulu sekian detik sebelum panel error muncul — kalau
+  /// internet hanya lemot, user sudah masuk isi halaman tanpa sempat
+  /// melihat pesan error.
+  static const _gracePeriod = Duration(seconds: 3);
+
+  /// Interval cek ulang koneksi otomatis — internet pulih → panel hilang
+  /// sendiri tanpa perlu diapa-apakan user.
+  static const _pollInterval = Duration(seconds: 5);
+
   @override
   void onInit() {
     super.onInit();
     loadAddress();
+    checkConnection();
+  }
+
+  @override
+  void onClose() {
+    _pollTimer?.cancel();
+    _graceTimer?.cancel();
+    super.onClose();
+  }
+
+  /// Cek koneksi sekali; kalau mati → mode offline aktif + polling
+  /// otomatis tiap [_pollInterval] sampai pulih.
+  Future<void> checkConnection() async {
+    final online = await hasInternetConnection();
+    offline.value = !online;
+
+    if (offline.value) {
+      // Cek lagi tiap 5 detik — internet pulih → isi tampil sendiri.
+      _pollTimer ??= Timer.periodic(_pollInterval, (_) => checkConnection());
+
+      // Baru beberapa detik → tampilkan Lottie dulu, panel belakangan.
+      _graceTimer ??= Timer(_gracePeriod, () {
+        if (offline.value) offlinePanelVisible.value = true;
+      });
+      return;
+    }
+
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _graceTimer?.cancel();
+    _graceTimer = null;
+    offlinePanelVisible.value = false;
+
+    // Baru pulih → pastikan alamat sudah ada (bila tadi kosong).
+    if (address.value.isEmpty) loadAddress();
+  }
+
+  /// Tombol "Coba Lagi" pada panel offline — cek koneksi sekarang juga.
+  Future<void> retryConnection() async {
+    if (checkingConnection.value) return;
+    checkingConnection.value = true;
+    try {
+      await checkConnection();
+    } finally {
+      checkingConnection.value = false;
+    }
   }
 
   Future<void> loadAddress() async {

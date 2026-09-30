@@ -6,7 +6,6 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../app/controllers/address_picker_controller.dart';
 import '../app/services/initial_position.dart';
-import '../app/services/network_status.dart';
 import '../app/services/reverse_geocoder.dart';
 import '../app/theme/app_colors.dart';
 import '../app/utils/pinch_zoom.dart';
@@ -46,13 +45,6 @@ class _MapPickerPageState extends State<MapPickerPage> {
   /// Sedang mengambil lokasi GPS (tombol "lokasi saya" menampilkan spinner).
   bool _locating = false;
   Timer? _debounce;
-
-  /// true = alamat gagal diambil karena tidak ada internet (dipakai sheet).
-  bool _offline = false;
-
-  /// true = kartu "tidak ada internet" sudah tampil untuk kondisi ini
-  /// (di-reset begitu ada pengambilan alamat yang berhasil).
-  bool _offlineNotified = false;
 
   /// Zoom dua jari berpusat di tengah layar (lihat pinch_zoom.dart).
   final _pinch = PinchZoomController();
@@ -95,7 +87,6 @@ class _MapPickerPageState extends State<MapPickerPage> {
 
   // ───────────────────────── PINCH ZOOM KUSTOM ─────────────────────────
 
-
   void _onPointerDown(PointerDownEvent e) {
     if (_pinch.pointerDown(e.pointer, e.position)) setState(() {});
   }
@@ -135,33 +126,20 @@ class _MapPickerPageState extends State<MapPickerPage> {
       _center = pos;
       _loading = true;
     });
-    final result = await _controller.reverseGeocode(pos.latitude, pos.longitude);
-
-    // Gagal total → bedakan "internet mati" dari "titik tidak dikenali",
-    // supaya user tidak disuruh menggeser pin padahal jaringan putus.
-    var offline = false;
-    if (result == null || result.full.isEmpty) {
-      offline = !await hasInternetConnection();
-    }
+    final result = await _controller.reverseGeocode(
+      pos.latitude,
+      pos.longitude,
+    );
     if (!mounted) return;
-
-    if (offline) {
-      if (!_offlineNotified) {
-        _offlineNotified = true;
-        showNoInternetSnack(context); // cukup sekali, tidak tiap geser
-      }
-    } else {
-      _offlineNotified = false;
-    }
 
     setState(() {
       _hasAddress = result != null && result.full.isNotEmpty;
-      _offline = offline;
       _title = result?.label ?? 'Lokasi dipilih';
       // Kalau geocode gagal, koordinat tetap ditampilkan sebagai info —
       // tapi tombol konfirmasi dikunci supaya koordinat mentah tidak
       // pernah tersimpan sebagai "alamat".
-      _address = result?.full ??
+      _address =
+          result?.full ??
           '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}';
       _loading = false;
     });
@@ -198,8 +176,10 @@ class _MapPickerPageState extends State<MapPickerPage> {
               onPointerUp: _onPointerUp,
               onPointerCancel: _onPointerUp,
               child: GoogleMap(
-                initialCameraPosition:
-                    CameraPosition(target: _center, zoom: 16),
+                initialCameraPosition: CameraPosition(
+                  target: _center,
+                  zoom: 16,
+                ),
                 onMapCreated: (c) {
                   _map = c;
                   final pending = _pendingCamera;
@@ -251,7 +231,10 @@ class _MapPickerPageState extends State<MapPickerPage> {
           Positioned(
             top: top + 12,
             left: 14,
-            child: RoundMapButton(icon: Icons.arrow_back, onTap: () => Get.back()),
+            child: RoundMapButton(
+              icon: Icons.arrow_back,
+              onTap: () => Get.back(),
+            ),
           ),
 
           // ── BOTTOM SHEET ──
@@ -264,7 +247,6 @@ class _MapPickerPageState extends State<MapPickerPage> {
               address: _address,
               loading: _loading,
               hasAddress: _hasAddress,
-              offline: _offline,
               onConfirm: () => _controller.confirmMapAddress(
                 _address,
                 _center.latitude,

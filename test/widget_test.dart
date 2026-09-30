@@ -10,60 +10,69 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:sehatly/app/services/network_status.dart';
 import 'package:sehatly/main.dart';
 
-const MethodChannel _geolocatorChannel =
-    MethodChannel('flutter.baseflow.com/geolocator');
+const MethodChannel _geolocatorChannel = MethodChannel(
+  'flutter.baseflow.com/geolocator',
+);
 
-const MethodChannel _packageInfoChannel =
-    MethodChannel('dev.fluttercommunity.plus/package_info');
+const MethodChannel _packageInfoChannel = MethodChannel(
+  'dev.fluttercommunity.plus/package_info',
+);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    // Jaringan diblokir di `flutter test` → splash akan selalu menganggap
+    // internet mati dan menahan user di layar "Cek Jaringanmu". Beri tahu
+    // tes bahwa koneksi tersedia supaya alur onboarding jalan normal.
+    connectivityProbe = ({
+      Duration timeout = const Duration(seconds: 2),
+    }) async => true;
     // Geolocator tidak punya platform-side di test -> beri mock supaya
     // checkPermission() segera membalas (status: belum diizinkan).
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_geolocatorChannel, (call) async {
-      switch (call.method) {
-        case 'checkPermission':
-          return 0; // LocationPermission.denied
-        case 'isLocationServiceEnabled':
-          return true;
-        case 'openAppSettings':
-        case 'openLocationSettings':
-          return true;
-        default:
-          return null;
-      }
-    });
+          switch (call.method) {
+            case 'checkPermission':
+              return 0; // LocationPermission.denied
+            case 'isLocationServiceEnabled':
+              return true;
+            case 'openAppSettings':
+            case 'openLocationSettings':
+              return true;
+            default:
+              return null;
+          }
+        });
 
     // Splash memanggil PackageInfo.fromPlatform() untuk menampilkan versi.
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_packageInfoChannel, (call) async {
-      if (call.method == 'getAll') {
-        return {
-          'appName': 'Sehatly',
-          'packageName': 'com.sehatly.app',
-          'version': '1.0.0',
-          'buildNumber': '1',
-        };
-      }
-      return null;
-    });
+          if (call.method == 'getAll') {
+            return {
+              'appName': 'Sehatly',
+              'packageName': 'com.sehatly.app',
+              'version': '1.0.0',
+              'buildNumber': '1',
+            };
+          }
+          return null;
+        });
   });
 
   tearDown(() {
+    connectivityProbe = dnsConnectivityProbe;
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
     messenger.setMockMethodCallHandler(_geolocatorChannel, null);
     messenger.setMockMethodCallHandler(_packageInfoChannel, null);
   });
 
-  testWidgets('Splash -> halaman izin lokasi -> pilih alamat',
-      (tester) async {
+  testWidgets('Splash -> halaman izin lokasi -> pilih alamat', (tester) async {
     await tester.pumpWidget(const MyApp());
     // PostFrameCallback splash menunda animasi 300ms → jalankan dulu.
     await tester.pump();
@@ -89,8 +98,9 @@ void main() {
     expect(find.text('Pilih Alamat'), findsOneWidget);
   });
 
-  testWidgets('Izin lokasi diberikan → koordinat tersimpan & masuk home',
-      (tester) async {
+  testWidgets('Izin lokasi diberikan → koordinat tersimpan & masuk home', (
+    tester,
+  ) async {
     // Ukuran layar seperti HP — layout halaman izin meluber di 800x600
     // (bawaan test) dan tombolnya jadi tidak bisa diketuk.
     tester.view.physicalSize = const Size(414, 896);
@@ -101,23 +111,23 @@ void main() {
     var permission = 0; // LocationPermission.denied
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(_geolocatorChannel, (call) async {
-      switch (call.method) {
-        case 'checkPermission':
-          return permission;
-        case 'requestPermission':
-          permission = 2; // LocationPermission.whileInUse
-          return permission;
-        case 'isLocationServiceEnabled':
-          return true;
-        case 'getCurrentPosition':
-          return {'latitude': -7.7686282, 'longitude': 110.3912216};
-        case 'openAppSettings':
-        case 'openLocationSettings':
-          return true;
-        default:
-          return null;
-      }
-    });
+          switch (call.method) {
+            case 'checkPermission':
+              return permission;
+            case 'requestPermission':
+              permission = 2; // LocationPermission.whileInUse
+              return permission;
+            case 'isLocationServiceEnabled':
+              return true;
+            case 'getCurrentPosition':
+              return {'latitude': -7.7686282, 'longitude': 110.3912216};
+            case 'openAppSettings':
+            case 'openLocationSettings':
+              return true;
+            default:
+              return null;
+          }
+        });
 
     await tester.pumpWidget(const MyApp());
     await tester.pump();
@@ -144,7 +154,10 @@ void main() {
 
     // Halaman home terbuka dan kartu alamatnya tampil.
     expect(find.text('Alamat terpilih'), findsOneWidget);
-    expect(find.textContaining('Koordinat -7.76863, 110.39122'), findsOneWidget);
+    expect(
+      find.textContaining('Koordinat -7.76863, 110.39122'),
+      findsOneWidget,
+    );
     // Reverse geocode butuh jaringan (diblokir test) → kartu menunggu
     // alamat, bukan crash.
     expect(

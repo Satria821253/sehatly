@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../config/prefs_keys.dart';
 import '../routes/app_routes.dart';
 import '../services/google_geocoding_service.dart';
@@ -31,10 +32,10 @@ class AddressPickerController extends GetxController {
   /// supaya hasil pencarian lama tidak menimpa yang baru.
   int _requestSeq = 0;
 
-  /// true = kartu "tidak ada internet" sudah tampil untuk sesi pencarian
-  /// ini (di-reset tiap kali query dikosongkan atau hasil berhasil
-  /// ditemukan) supaya tidak berulang tiap ketikan.
-  bool _offlineNotified = false;
+  /// true → internet mati saat dicari; area hasil menampilkan panel
+  /// "Cek Jaringanmu" + tombol coba lagi (bukan toast, bukan shimmer
+  /// tanpa ujung).
+  final offline = false.obs;
 
   @override
   void onClose() {
@@ -51,7 +52,7 @@ class AddressPickerController extends GetxController {
       isLoading.value = false;
       results.clear();
       _places.endSession();
-      _offlineNotified = false;
+      offline.value = false;
       return;
     }
     _places.startSession();
@@ -67,6 +68,18 @@ class AddressPickerController extends GetxController {
     final seq = ++_requestSeq;
     isLoading.value = true;
 
+    // Cek koneksi dulu: saat internet mati jangan menunggu timeout tiap
+    // layanan (bisa lebih dari 20 detik) — shimmer cukup sebentar, lalu
+    // panel "Cek Jaringanmu" tampil di area hasil.
+    if (!await hasInternetConnection()) {
+      if (seq != _requestSeq) return; // sudah ada pencarian baru — buang
+      offline.value = true;
+      results.clear();
+      isLoading.value = false;
+      return;
+    }
+    offline.value = false;
+
     // Utama: Google Places Autocomplete. Kalau gagal → OpenStreetMap.
     var found = await _places.search(q);
     if (seq != _requestSeq) return; // sudah ada pencarian baru — buang
@@ -77,26 +90,20 @@ class AddressPickerController extends GetxController {
       if (seq != _requestSeq) return;
     }
 
-    // Hasil kosong bisa berarti "memang tidak ada yang cocok" atau
-    // "internet mati" — cek jaringan dulu supaya user tidak bingung
-    // melihat daftar kosong tanpa penjelasan.
-    if (found.isEmpty) {
-      final online = await hasInternetConnection();
-      if (seq != _requestSeq) return;
-      if (!online && !_offlineNotified) {
-        _offlineNotified = true;
-        showSnackFromGlobal(showNoInternetSnack);
-      }
-    } else {
-      _offlineNotified = false; // berhasil → kartu boleh muncul lagi nanti
-    }
-
     results.assignAll(found);
     isLoading.value = false;
 
     // Lengkapi 3 item pertama dengan alamat detail (nomor, kecamatan,
     // kode pos) supaya langsung kelihatan sebelum dipilih.
     await _enrichTopResults(seq);
+  }
+
+  /// Cek koneksi ulang lalu cari lagi dengan query yang sama — dipanggil
+  /// tombol "Coba Lagi" pada panel "Cek Jaringanmu".
+  Future<void> retrySearch() async {
+    final q = query.value.trim();
+    if (q.isEmpty) return;
+    await _search(q);
   }
 
   /// Perkaya hasil pencarian dengan Place Details untuk [limit] item pertama.
@@ -138,10 +145,11 @@ class AddressPickerController extends GetxController {
     // Hasil Google: ambil alamat lengkap + koordinat presisi via place_id.
     // Hasil OpenStreetMap (prefix "osm:") sudah lengkap dari daftar,
     // jadi tidak perlu request tambahan.
-    final fromGoogle = address.placeId != null &&
-        !address.placeId!.startsWith('osm:');
-    final detail =
-        fromGoogle ? await _geocoding.fromPlaceId(address.placeId!) : null;
+    final fromGoogle =
+        address.placeId != null && !address.placeId!.startsWith('osm:');
+    final detail = fromGoogle
+        ? await _geocoding.fromPlaceId(address.placeId!)
+        : null;
     final resolved = detail ?? address;
 
     try {

@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shimmer/shimmer.dart';
+
 import '../app/bindings/address_picker_binding.dart';
 import '../app/controllers/address_picker_controller.dart';
 import '../app/theme/app_colors.dart';
+import '../widgets/offline_panel.dart';
 
 /// Halaman "Pilih Alamat" — dipakai saat navigasi langsung (route).
 class AddressPickerPage extends StatelessWidget {
@@ -74,8 +76,10 @@ class _AddressPickerContent extends StatelessWidget {
               onTap: () => Navigator.of(context).maybePop(),
               behavior: HitTestBehavior.opaque,
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 40, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 40,
+                  vertical: 8,
+                ),
                 child: Container(
                   width: 44,
                   height: 5,
@@ -123,7 +127,10 @@ class _SearchField extends StatelessWidget {
         controller: controller.searchController,
         onChanged: controller.onQueryChanged,
         textInputAction: TextInputAction.search,
-        style: GoogleFonts.poppins(fontSize: 15, color: const Color(0xFF111827)),
+        style: GoogleFonts.poppins(
+          fontSize: 15,
+          color: const Color(0xFF111827),
+        ),
         decoration: InputDecoration(
           hintText: 'Ketik jalan, perumahan, atau gedung',
           hintStyle: GoogleFonts.poppins(fontSize: 15, color: Colors.grey[500]),
@@ -138,7 +145,10 @@ class _SearchField extends StatelessWidget {
           ),
           filled: true,
           fillColor: AppColors.white,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(color: Color(0xFFD1D5DB)),
@@ -189,21 +199,31 @@ class _ResultsList extends StatelessWidget {
           child: ListView.separated(
             padding: const EdgeInsets.symmetric(vertical: 4),
             itemCount: 6,
-            separatorBuilder: (_, _) => const Divider(height: 1, indent: 60, color: Color(0xFFF0F2F5)),
+            separatorBuilder: (_, _) =>
+                const Divider(height: 1, indent: 60, color: Color(0xFFF0F2F5)),
             itemBuilder: (_, _) => ListTile(
               leading: Container(
                 width: 24,
                 height: 24,
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                ),
               ),
-              title: Container(   
+              title: Container(
                 height: 14,
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
               subtitle: Container(
                 height: 12,
                 width: 160,
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(4),
+                ),
               ),
               contentPadding: const EdgeInsets.symmetric(horizontal: 24),
             ),
@@ -211,12 +231,19 @@ class _ResultsList extends StatelessWidget {
         );
       }
 
+      if (controller.offline.value) {
+        // Internet mati → shimmer berhenti, ganti panel "Cek Jaringanmu"
+        // yang punya tombol coba lagi (lihat offline_panel.dart).
+        return OfflinePanel(onRetry: controller.retrySearch);
+      }
+
       if (controller.results.isEmpty) return const SizedBox.shrink();
 
       return ListView.separated(
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: controller.results.length,
-        separatorBuilder: (_, _) => const Divider(height: 1, indent: 60, color: Color(0xFFF0F2F5)),
+        separatorBuilder: (_, _) =>
+            const Divider(height: 1, indent: 60, color: Color(0xFFF0F2F5)),
         itemBuilder: (context, index) {
           final address = controller.results[index];
           return ListTile(
@@ -227,13 +254,19 @@ class _ResultsList extends StatelessWidget {
             leading: const Icon(Icons.location_on),
             title: Text(
               address.main,
-              style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF111827)),
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                color: const Color(0xFF111827),
+              ),
             ),
             subtitle: address.detail.isEmpty
                 ? null
                 : Text(
                     address.detail,
-                    style: GoogleFonts.poppins(fontSize: 12, color: const Color(0xFF6B7280)),
+                    style: GoogleFonts.poppins(
+                      fontSize: 12,
+                      color: const Color(0xFF6B7280),
+                    ),
                   ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 24),
           );

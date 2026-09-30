@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:get/get.dart';
 import 'package:sehatly/app/controllers/home_controller.dart';
 import 'package:sehatly/app/routes/app_routes.dart';
+import 'package:sehatly/app/services/network_status.dart';
 import 'package:sehatly/pages/home_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -41,7 +42,19 @@ Future<void> _pumpHome(WidgetTester tester, {String? savedAddress}) async {
 }
 
 void main() {
-  tearDown(Get.reset);
+  setUp(() {
+    // Jaringan diblokir di `flutter test` → HomeController akan selalu
+    // masuk mode offline. Beri tahu tes bahwa koneksi tersedia supaya isi
+    // halaman tampil seperti pada perangkat sungguhan.
+    connectivityProbe = ({
+      Duration timeout = const Duration(seconds: 2),
+    }) async => true;
+  });
+
+  tearDown(() {
+    connectivityProbe = dnsConnectivityProbe;
+    Get.reset();
+  });
 
   testWidgets('Alamat tersimpan tampil di kartu & chip lokasi', (tester) async {
     await _pumpHome(tester, savedAddress: _fullAddress);
@@ -51,26 +64,34 @@ void main() {
     // Chip di pojok kanan atas memakai alamat ringkas.
     expect(find.text(_shortAddress), findsOneWidget);
     // Koordinat ikut tampil.
-    expect(find.textContaining('Koordinat -7.76863, 110.39122'), findsOneWidget);
+    expect(
+      find.textContaining('Koordinat -7.76863, 110.39122'),
+      findsOneWidget,
+    );
 
     // Posisi chip: di sebelah kanan dan di bagian atas layar.
     final screen = tester.getSize(find.byType(GetMaterialApp));
     final chip = tester.getRect(find.byKey(const Key('home_location_chip')));
-    expect(chip.center.dx, greaterThan(screen.width / 2),
-        reason: 'chip lokasi harus di pojok kanan');
-    expect(chip.top, lessThan(120),
-        reason: 'chip lokasi harus di bagian atas');
+    expect(
+      chip.center.dx,
+      greaterThan(screen.width / 2),
+      reason: 'chip lokasi harus di pojok kanan',
+    );
+    expect(chip.top, lessThan(120), reason: 'chip lokasi harus di bagian atas');
   });
 
-  testWidgets('Belum ada alamat → chip mengajak memilih alamat', (tester) async {
+  testWidgets('Belum ada alamat → chip mengajak memilih alamat', (
+    tester,
+  ) async {
     await _pumpHome(tester);
 
     expect(find.text('Pilih alamat'), findsOneWidget);
     expect(find.textContaining('Belum ada alamat'), findsOneWidget);
   });
 
-  testWidgets('Ketuk chip lokasi → sheet pilih alamat terbuka & bisa ditutup',
-      (tester) async {
+  testWidgets('Ketuk chip lokasi → sheet pilih alamat terbuka & bisa ditutup', (
+    tester,
+  ) async {
     await _pumpHome(tester, savedAddress: _fullAddress);
 
     await tester.tap(find.byKey(const Key('home_location_chip')));
