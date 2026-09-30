@@ -78,6 +78,10 @@ void main() {
       reason: 'chip lokasi harus di pojok kanan',
     );
     expect(chip.top, lessThan(120), reason: 'chip lokasi harus di bagian atas');
+
+    // Tutup controller supaya timer polling tidak tertinggal di akhir tes.
+    // (Get.reset() tidak memanggil onClose — harus Get.delete.)
+    Get.delete<HomeController>(force: true);
   });
 
   testWidgets('Belum ada alamat → chip mengajak memilih alamat', (
@@ -87,6 +91,10 @@ void main() {
 
     expect(find.text('Pilih alamat'), findsOneWidget);
     expect(find.textContaining('Belum ada alamat'), findsOneWidget);
+
+    // Tutup controller supaya timer polling tidak tertinggal di akhir tes.
+    // (Get.reset() tidak memanggil onClose — harus Get.delete.)
+    Get.delete<HomeController>(force: true);
   });
 
   testWidgets('Ketuk chip lokasi → sheet pilih alamat terbuka & bisa ditutup', (
@@ -107,5 +115,9 @@ void main() {
     await tester.tap(find.byKey(const Key('address_picker_handle')));
     await tester.pumpAndSettle();
     expect(find.text(_fullAddress), findsOneWidget);
+
+    // Tutup controller supaya timer polling tidak tertinggal di akhir tes.
+    // (Get.reset() tidak memanggil onClose — harus Get.delete.)
+    Get.delete<HomeController>(force: true);
   });
 }

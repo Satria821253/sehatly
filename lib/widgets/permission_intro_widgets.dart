@@ -1,8 +1,8 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../app/models/permission_item.dart';
-import '../app/theme/app_colors.dart';
+
 class BoldText extends StatelessWidget {
   const BoldText(this.text, {super.key});
   final String text;
@@ -75,9 +75,11 @@ class PermissionTile extends StatelessWidget {
   }
 }
 
+/// Penutup bagian bawah intro — sengaja **teks biasa**, bukan tautan:
+/// URL kebijakan privasi belum tersedia, jadi jangan diberi gaya
+/// primary + garis bawah yang memberi sinyal tautan palsu.
 class PrivacyFooter extends StatelessWidget {
-  const PrivacyFooter({super.key, required this.onTap});
-  final VoidCallback onTap;
+  const PrivacyFooter({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -98,11 +100,8 @@ class PrivacyFooter extends StatelessWidget {
             style: GoogleFonts.poppins(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: AppColors.primary,
-              decoration: TextDecoration.underline,
-              decorationColor: AppColors.primary,
+              color: const Color(0xFF374151),
             ),
-            recognizer: TapGestureRecognizer()..onTap = onTap,
           ),
         ],
       ),

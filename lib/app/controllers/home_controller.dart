@@ -10,7 +10,7 @@ import '../config/prefs_keys.dart';
 import '../services/network_status.dart';
 import '../services/reverse_geocoder.dart';
 
-class HomeController extends GetxController {
+class HomeController extends GetxController with WidgetsBindingObserver {
   /// Alamat terpilih — ditulis oleh AddressPickerController /
   /// map picker / alur izin GPS, dibaca di sini untuk halaman home.
   final address = ''.obs;
@@ -19,12 +19,17 @@ class HomeController extends GetxController {
   final isLoading = true.obs;
 
   /// true → tidak ada internet. Isi halaman disembunyikan dan hanya
-  /// Lottie loading yang tampil (tab bar tetap hidup, seperti Halodoc).
+  /// Lottie loading yang tampil, lalu panel "Cek Jaringanmu".
   final offline = false.obs;
 
   /// true → masa tenggang Lottie lewat tapi koneksi belum juga pulih →
   /// tampilkan panel "Cek Jaringanmu" + tombol Coba Lagi.
   final offlinePanelVisible = false.obs;
+
+  /// true → lookup alamat sudah dicoba tapi gagal (koordinat ada, alamat
+  /// tidak) — kartu alamat menampilkan ajakan memilih manual, bukan teks
+  /// "Menentukan alamat…" yang seolah terus diproses tanpa pernah selesai.
+  final addressLookupFailed = false.obs;
 
   /// true → sedang memeriksa koneksi (ditekan dari tombol Coba Lagi).
   final checkingConnection = false.obs;
@@ -32,38 +37,61 @@ class HomeController extends GetxController {
   Timer? _pollTimer;
   Timer? _graceTimer;
 
+  /// Interval polling yang sedang berjalan — dicek supaya timer tidak
+  /// dibuat ulang tiap cek koneksi yang hasilnya sama.
+  Duration? _pollInterval;
+
   /// Lottie tampil dulu sekian detik sebelum panel error muncul — kalau
   /// internet hanya lemot, user sudah masuk isi halaman tanpa sempat
   /// melihat pesan error.
   static const _gracePeriod = Duration(seconds: 3);
 
-  /// Interval cek ulang koneksi otomatis — internet pulih → panel hilang
+  /// Cek ulang tiap 5 detik **saat offline** → internet pulih, isi tampil
   /// sendiri tanpa perlu diapa-apakan user.
-  static const _pollInterval = Duration(seconds: 5);
+  static const _pollOffline = Duration(seconds: 5);
+
+  /// Cek ulang tiap 30 detik **saat online** → putusnya koneksi (kuota
+  /// habis, pindah jaringan) tetap terdeteksi walau user diam di halaman
+  /// ini. Tanpa ini, polling berhenti begitu koneksi pulih untuk pertama
+  /// kali dan putus berikutnya tidak pernah diketahui.
+  static const _pollOnline = Duration(seconds: 30);
 
   @override
   void onInit() {
     super.onInit();
+    WidgetsBinding.instance.addObserver(this);
     loadAddress();
     checkConnection();
   }
 
   @override
   void onClose() {
-    _pollTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    _stopPolling();
     _graceTimer?.cancel();
     super.onClose();
   }
 
-  /// Cek koneksi sekali; kalau mati → mode offline aktif + polling
-  /// otomatis tiap [_pollInterval] sampai pulih.
+  /// Aplikasi ke latar belakang → polling dihentikan (hemat baterai).
+  /// Kembali ke depan → cek sekali langsung, polling tersambung lagi.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      checkConnection();
+    } else if (state == AppLifecycleState.paused) {
+      _stopPolling();
+    }
+  }
+
+  /// Cek koneksi sekali lalu atur polling sesuai hasilnya: offline →
+  /// polling rapat (5 dtk) + masa tenggang Lottie; online → polling
+  /// longgar (30 dtk) + panel dibersihkan.
   Future<void> checkConnection() async {
     final online = await hasInternetConnection();
     offline.value = !online;
 
     if (offline.value) {
-      // Cek lagi tiap 5 detik — internet pulih → isi tampil sendiri.
-      _pollTimer ??= Timer.periodic(_pollInterval, (_) => checkConnection());
+      _schedulePoll(_pollOffline);
 
       // Baru beberapa detik → tampilkan Lottie dulu, panel belakangan.
       _graceTimer ??= Timer(_gracePeriod, () {
@@ -72,14 +100,32 @@ class HomeController extends GetxController {
       return;
     }
 
-    _pollTimer?.cancel();
-    _pollTimer = null;
+    _schedulePoll(_pollOnline);
     _graceTimer?.cancel();
     _graceTimer = null;
     offlinePanelVisible.value = false;
 
-    // Baru pulih → pastikan alamat sudah ada (bila tadi kosong).
-    if (address.value.isEmpty) loadAddress();
+    // Baru pulih → lengkapi alamat yang masih kosong / masih koordinat.
+    if (address.value.isEmpty || _isRawCoordinates(address.value)) {
+      loadAddress();
+    }
+  }
+
+  /// Jadwalkan polling dengan [interval]; kalau timer sudah berjalan
+  /// dengan interval sama, dibiarkan (tidak di-reset tiap cek).
+  void _schedulePoll(Duration interval) {
+    if (_pollTimer != null && _pollInterval == interval) return;
+    _pollTimer?.cancel();
+    _pollInterval = interval;
+    _pollTimer = Timer.periodic(interval, (_) => checkConnection());
+  }
+
+  /// Hentikan polling — dipanggil saat aplikasi ke latar belakang dan
+  /// saat controller ditutup.
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    _pollInterval = null;
   }
 
   /// Tombol "Coba Lagi" pada panel offline — cek koneksi sekarang juga.
@@ -95,6 +141,7 @@ class HomeController extends GetxController {
 
   Future<void> loadAddress() async {
     isLoading.value = true;
+    addressLookupFailed.value = false;
     try {
       final prefs = await SharedPreferences.getInstance();
       address.value = prefs.getString(PrefsKeys.selectedAddress) ?? '';
@@ -107,9 +154,12 @@ class HomeController extends GetxController {
       isLoading.value = false;
     }
 
-    // Alamat kosong → coba lengkapi sendiri (mis. tadi gagal saat izin
-    // diberikan karena tidak ada jaringan).
-    if (address.value.isEmpty) await _recoverAddress();
+    // Alamat masih kosong (tadi gagal saat izin diberikan tanpa jaringan)
+    // atau masih berupa koordinat mentah (dipilih dari peta saat offline)
+    // → lengkapi sendiri.
+    if (address.value.isEmpty || _isRawCoordinates(address.value)) {
+      await _recoverAddress();
+    }
   }
 
   Future<void> _recoverAddress() async {
@@ -135,8 +185,18 @@ class HomeController extends GetxController {
       }
     }
 
+    final current = address.value;
+    // Sudah alamat lengkap → tidak ada yang perlu diperbaiki.
+    if (current.isNotEmpty && !_isRawCoordinates(current)) return;
+
     final found = await lookupAddress(la, lo);
-    if (found == null || found.isEmpty || address.value.isNotEmpty) return;
+    if (found == null || found.isEmpty) {
+      // Gagal (biasanya karena jaringan) → tandai, supaya kartu alamat
+      // berhenti menampilkan "Menentukan alamat…" seolah prosesnya masih
+      // berjalan padahal sudah tidak ada request lagi.
+      if (current.isEmpty) addressLookupFailed.value = true;
+      return;
+    }
 
     address.value = found;
     try {
@@ -146,6 +206,16 @@ class HomeController extends GetxController {
       debugPrint('Gagal menyimpan alamat: $e');
       showSnackFromGlobal(showAddressSaveFailedSnack);
     }
+  }
+
+  /// true bila [text] masih berupa koordinat mentah ("−7.79560,
+  /// 110.36950") — hasil konfirmasi peta saat sedang offline, perlu
+  /// diganti alamat lengkap begitu internet tersedia.
+  static bool _isRawCoordinates(String text) {
+    final parts = text.split(',');
+    if (parts.length != 2) return false;
+    return double.tryParse(parts[0].trim()) != null &&
+        double.tryParse(parts[1].trim()) != null;
   }
 
   /// Lokasi ringkas untuk chip di pojok kanan atas (2 segmen pertama),

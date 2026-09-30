@@ -19,7 +19,4 @@ class PrefsKeys {
 
   /// true = user sudah melihat halaman "Penggunaan Data & Izin".
   static const String hasSeenIntro = 'has_seen_intro';
-
-  /// true = user sudah menyetujui pemakaian izin di halaman intro.
-  static const String permissionConsentGiven = 'permission_consent_given';
 }

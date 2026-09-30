@@ -29,7 +29,7 @@ Future<LatLng> resolveInitialPosition({
     );
     if (coords != null) return LatLng(coords.lat, coords.lng);
   } catch (e) {
-    debugPrint('>>> ambil lokasi awal: $e');
+    debugPrint('Gagal mengambil lokasi awal: $e');
   }
 
   // 2) Lokasi terakhir yang pernah dipilih user.
@@ -39,7 +39,7 @@ Future<LatLng> resolveInitialPosition({
     final lng = prefs.getDouble(PrefsKeys.selectedLng);
     if (lat != null && lng != null) return LatLng(lat, lng);
   } catch (e) {
-    debugPrint('>>> baca lokasi tersimpan gagal: $e');
+    debugPrint('Gagal membaca lokasi tersimpan: $e');
   }
 
   // 3) Terakhir: pusat default.

@@ -2,7 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// Pembatas pemakaian API Google **per hari** — dipasang karena aplikasi ini
 /// masih tahap develop, supaya kuota gratis Google (10.000 request/bulan)
-/// tidak terbakar habis oleh percobaan/degbug berulang.
+/// tidak terbakar habis oleh percobaan/debug berulang.
 ///
 /// Cara kerja:
 ///  - request Google hanya dijalankan bila [isAllowed] == true
@@ -53,10 +53,6 @@ class GoogleQuota {
   /// Jumlah pemakaian Google hari ini (untuk log/debug).
   static int get used => _used;
 
-  /// Sisa kuota hari ini.
-  static int get remaining =>
-      _used >= maxPerDay ? 0 : maxPerDay - _used;
-
   /// Bolehkah memanggil API Google sekarang?
   static Future<bool> isAllowed() async {
     await _ensureLoaded();
@@ -68,12 +64,24 @@ class GoogleQuota {
   }
 
   /// Catat 1 request Google yang **berhasil**.
+  ///
+  /// Pencatatan sengaja tidak boleh menggagalkan request-nya: bila
+  /// SharedPreferences bermasalah, hasil geocode yang sudah benar tetap
+  /// dikembalikan — bukan dibuang hanya karena pencatatan kuota gagal.
   static Future<void> recordSuccess() async {
-    await _ensureLoaded();
-    await _rolloverIfNeeded();
+    try {
+      await _ensureLoaded();
+      await _rolloverIfNeeded();
+    } catch (_) {
+      // Gagal membaca prefs → pakai penghitung in-memory apa adanya.
+    }
     _used++;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_dateKey, _date);
-    await prefs.setInt(_countKey, _used);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_dateKey, _date);
+      await prefs.setInt(_countKey, _used);
+    } catch (_) {
+      // Gagal menyimpan → lewati pencatatan, hasil request tetap sah.
+    }
   }
 }

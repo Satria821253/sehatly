@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../../pages/address_picker_page.dart' show AddressPickerSheet;
 import '../config/prefs_keys.dart';
 import '../routes/app_routes.dart';
 import '../services/reverse_geocoder.dart';
@@ -41,7 +40,6 @@ class LocationPermissionController extends GetxController
 
   Future<void> _recheckAfterSettings() async {
     final permission = await Geolocator.checkPermission();
-    debugPrint('>>> recheck after settings: $permission');
     if (permission == LocationPermission.whileInUse ||
         permission == LocationPermission.always) {
       isPermanentlyDenied.value = false;
@@ -113,7 +111,6 @@ class LocationPermissionController extends GetxController
       // denied atau belum pernah diminta → tampilkan dialog sistem
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        debugPrint('>>> requestPermission: $permission');
       }
 
       if (permission == LocationPermission.whileInUse ||
@@ -128,13 +125,6 @@ class LocationPermissionController extends GetxController
     } finally {
       isLoading.value = false;
     }
-  }
-
-  Future<void> chooseManualAddress(BuildContext context) async {
-    if (isLoading.value) return;
-    // Bottom sheet, bukan halaman — panel bisa digeser ke bawah untuk
-    // menutup tanpa tombol back.
-    await AddressPickerSheet.show(context);
   }
 
   /// Izin baru saja diberikan → ambil lokasi GPS + alamatnya dulu, baru
@@ -167,7 +157,7 @@ class LocationPermissionController extends GetxController
         await prefs.setString(PrefsKeys.selectedAddress, address);
       }
     } catch (e) {
-      debugPrint('>>> simpan lokasi GPS: $e');
+      debugPrint('Gagal menyimpan lokasi GPS: $e');
     }
   }
 

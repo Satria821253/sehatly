@@ -67,35 +67,46 @@ class AddressPickerController extends GetxController {
   Future<void> _search(String q) async {
     final seq = ++_requestSeq;
     isLoading.value = true;
-
-    // Cek koneksi dulu: saat internet mati jangan menunggu timeout tiap
-    // layanan (bisa lebih dari 20 detik) — shimmer cukup sebentar, lalu
-    // panel "Cek Jaringanmu" tampil di area hasil.
-    if (!await hasInternetConnection()) {
+    try {
+      // Cek koneksi dulu: saat internet mati jangan menunggu timeout tiap
+      // layanan (bisa lebih dari 20 detik) — shimmer cukup sebentar, lalu
+      // panel "Cek Jaringanmu" tampil di area hasil.
+      if (!await hasInternetConnection()) {
+        if (seq != _requestSeq) return; // sudah ada pencarian baru — buang
+        offline.value = true;
+        results.clear();
+        return;
+      }
       if (seq != _requestSeq) return; // sudah ada pencarian baru — buang
-      offline.value = true;
-      results.clear();
+      offline.value = false;
+
+      // Utama: Google Places Autocomplete. Kalau gagal → OpenStreetMap.
+      var found = await _places.search(q);
+      if (seq != _requestSeq) return; // sudah ada pencarian baru — buang
+
+      if (found == null) {
+        found = await _osm.search(q);
+        if (seq != _requestSeq) return;
+      }
+
+      results.assignAll(found);
       isLoading.value = false;
-      return;
-    }
-    offline.value = false;
 
-    // Utama: Google Places Autocomplete. Kalau gagal → OpenStreetMap.
-    var found = await _places.search(q);
-    if (seq != _requestSeq) return; // sudah ada pencarian baru — buang
-
-    if (found == null) {
-      debugPrint('Fallback pencarian alamat ke OpenStreetMap');
-      found = await _osm.search(q);
+      // Lengkapi 3 item pertama dengan alamat detail (nomor, kecamatan,
+      // kode pos) supaya langsung kelihatan sebelum dipilih.
+      await _enrichTopResults(seq);
+    } catch (e) {
+      // Gagal di tengah jalan (timeout, body bukan JSON, prefs bermasalah)
+      // — jangan biarkan shimmer berputar tanpa ujung.
+      debugPrint('Gagal mencari alamat: $e');
       if (seq != _requestSeq) return;
+      results.clear();
+      offline.value = !await hasInternetConnection();
+    } finally {
+      // Hanya pencarian terbaru yang berhak mengubah state; yang sudah
+      // basi tidak boleh mematikan loading milik pencarian baru.
+      if (seq == _requestSeq) isLoading.value = false;
     }
-
-    results.assignAll(found);
-    isLoading.value = false;
-
-    // Lengkapi 3 item pertama dengan alamat detail (nomor, kecamatan,
-    // kode pos) supaya langsung kelihatan sebelum dipilih.
-    await _enrichTopResults(seq);
   }
 
   /// Cek koneksi ulang lalu cari lagi dengan query yang sama — dipanggil
@@ -145,32 +156,30 @@ class AddressPickerController extends GetxController {
     // Hasil Google: ambil alamat lengkap + koordinat presisi via place_id.
     // Hasil OpenStreetMap (prefix "osm:") sudah lengkap dari daftar,
     // jadi tidak perlu request tambahan.
-    final fromGoogle =
-        address.placeId != null && !address.placeId!.startsWith('osm:');
-    final detail = fromGoogle
-        ? await _geocoding.fromPlaceId(address.placeId!)
-        : null;
-    final resolved = detail ?? address;
+    //
+    // Gagal mengambil detail tidak membatalkan pemilihan — pakai hasil
+    // autocomplete apa adanya, supaya state tidak tersangkut hanya karena
+    // satu request tambahan gagal.
+    var resolved = address;
+    if (address.placeId != null && !address.placeId!.startsWith('osm:')) {
+      try {
+        final detail = await _geocoding.fromPlaceId(address.placeId!);
+        if (detail != null) resolved = detail;
+      } catch (e) {
+        debugPrint('Gagal mengambil detail alamat: $e');
+      }
+    }
 
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(PrefsKeys.selectedAddress, resolved.full);
-      final lat = resolved.lat;
-      final lng = resolved.lng;
-      if (lat != null && lng != null) {
-        await prefs.setDouble(PrefsKeys.selectedLat, lat);
-        await prefs.setDouble(PrefsKeys.selectedLng, lng);
-      }
-      await prefs.setBool(PrefsKeys.manualAddressSet, true);
-      // User sampai home lewat pemilih alamat → tandai "pernah sampai
-      // home", supaya splash menampilkan intro "Penggunaan Data & Izin"
-      // pada kunjungan berikutnya (bukan hanya untuk yang memberi izin
-      // lokasi).
-      await prefs.setBool(PrefsKeys.hasReachedHome, true);
+      await _persistSelected(
+        resolved.full,
+        lat: resolved.lat,
+        lng: resolved.lng,
+      );
     } catch (e) {
       // Penyimpanan penuh/bermasalah → jangan pindah halaman, user tetap
       // di sheet dan bisa menekan item yang sama sekali lagi.
-      debugPrint('>>> gagal simpan alamat: $e');
+      debugPrint('Gagal menyimpan alamat: $e');
       _places.endSession();
       isLoading.value = false;
       isSelecting.value = false;
@@ -198,20 +207,35 @@ class AddressPickerController extends GetxController {
 
   Future<void> confirmMapAddress(String full, double lat, double lon) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(PrefsKeys.selectedAddress, full);
-      await prefs.setDouble(PrefsKeys.selectedLat, lat);
-      await prefs.setDouble(PrefsKeys.selectedLng, lon);
-      await prefs.setBool(PrefsKeys.manualAddressSet, true);
-      // Sama seperti pencarian: sampai home dari peta juga menandai bahwa
-      // intro izin belum/bisa ditampilkan di kunjungan berikutnya.
-      await prefs.setBool(PrefsKeys.hasReachedHome, true);
+      await _persistSelected(full, lat: lat, lng: lon);
     } catch (e) {
       // Gagal menyimpan → tetap di peta supaya tombol bisa ditekan lagi.
-      debugPrint('>>> gagal simpan alamat (peta): $e');
+      debugPrint('Gagal menyimpan alamat (peta): $e');
       showSnackFromGlobal(showAddressSaveFailedSnack);
       return;
     }
     Get.offAllNamed(AppRoutes.home);
+  }
+
+  /// Simpan hasil pemilihan ke SharedPreferences — dipakai pemilih alamat
+  /// maupun peta, supaya kunci yang ditulis selalu sama dan tidak gampang
+  /// berbeda saat salah satunya diubah.
+  ///
+  /// `hasReachedHome` ikut diset di sini: kunjungan berikutnya menampilkan
+  /// intro "Penggunaan Data & Izin" bila `hasSeenIntro` masih false —
+  /// berlaku untuk semua jalur masuk home (izin GPS, pencarian, peta).
+  Future<void> _persistSelected(
+    String full, {
+    double? lat,
+    double? lng,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(PrefsKeys.selectedAddress, full);
+    if (lat != null && lng != null) {
+      await prefs.setDouble(PrefsKeys.selectedLat, lat);
+      await prefs.setDouble(PrefsKeys.selectedLng, lng);
+    }
+    await prefs.setBool(PrefsKeys.manualAddressSet, true);
+    await prefs.setBool(PrefsKeys.hasReachedHome, true);
   }
 }

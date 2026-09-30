@@ -72,10 +72,7 @@ class PermissionIntroPage extends GetView<PermissionIntroController> {
                         const SizedBox(height: 20),
                       ],
                       const SizedBox(height: 4),
-                      PrivacyFooter(
-                        onTap: () {
-                        },
-                      ),
+                      const PrivacyFooter(),
                       const SizedBox(height: 8),
                     ],
                   ),

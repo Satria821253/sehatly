@@ -182,7 +182,8 @@ void main() {
       expect(find.text('Cek Jaringanmu'), findsOneWidget);
       expect(find.text(_savedAddress), findsNothing); // isi disembunyikan
 
-      // Pulihkan koneksi supaya timer polling tidak tertinggal di akhir tes.
+      // Pulihkan koneksi supaya isi halaman kembali tampil, lalu tutup
+      // controller supaya timer polling tidak tertinggal di akhir tes.
       connectivityProbe = ({
         Duration timeout = const Duration(seconds: 2),
       }) async => true;
@@ -191,6 +192,8 @@ void main() {
 
       expect(find.text('Cek Jaringanmu'), findsNothing);
       expect(find.text(_savedAddress), findsOneWidget);
+      // (Get.reset() tidak memanggil onClose — harus Get.delete.)
+      Get.delete<HomeController>(force: true);
     });
   });
 
@@ -226,6 +229,11 @@ void main() {
         expect(find.text('Cek Jaringanmu'), findsNothing);
         expect(find.text(_savedAddress), findsOneWidget);
         expect(find.byType(LottieLoading), findsNothing);
+
+        // Tutup controller supaya timer polling tidak tertinggal di
+        // akhir tes. (Get.reset() tidak memanggil onClose — harus
+        // Get.delete.)
+        Get.delete<HomeController>(force: true);
       },
     );
   });

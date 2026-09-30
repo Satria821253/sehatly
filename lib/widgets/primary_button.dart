@@ -26,7 +26,10 @@ class _PrimaryButtonState extends State<PrimaryButton> {
     final disabled = widget.onPressed == null || widget.isLoading;
 
     return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
+      onTapDown: (_) {
+        if (disabled) return; // tombol mati/loading tidak ikut mengecil
+        setState(() => _pressed = true);
+      },
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(

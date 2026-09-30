@@ -88,7 +88,7 @@ class LocationPermissionPage extends GetView<LocationPermissionController> {
                     label: 'TENTUKAN ALAMAT',
                     onPressed: () => AddressPickerSheet.show(context),
                   ),
-                 SizedBox(height: 100),
+                 const SizedBox(height: 100),
                 ],
               ),
             ),

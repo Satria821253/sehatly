@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -36,13 +35,11 @@ class SplashController extends GetxController {
   }
 
   Future<void> goHome() async {
-    debugPrint('>>> goHome: route=${Get.currentRoute}');
     if (Get.currentRoute != AppRoutes.splash) return;
 
     // Internet jelek/mati → tahan user di layar "Cek Jaringanmu"
     // (Lottie + tombol Coba Lagi), jangan masuk home dalam kondisi kosong.
     if (!await hasInternetConnection()) {
-      debugPrint('>>> goHome: tidak ada koneksi → connection check');
       if (Get.currentRoute != AppRoutes.splash) return;
       Get.offAllNamed(AppRoutes.connectionCheck);
       return;
@@ -50,7 +47,6 @@ class SplashController extends GetxController {
 
     final route = await resolveNextRoute();
 
-    debugPrint('>>> goHome: nextRoute=$route, current=${Get.currentRoute}');
     if (Get.currentRoute != AppRoutes.splash) return;
     Get.offAllNamed(route);
   }

@@ -8,7 +8,10 @@ import '../app/controllers/address_picker_controller.dart';
 import '../app/theme/app_colors.dart';
 import '../widgets/offline_panel.dart';
 
-/// Halaman "Pilih Alamat" — dipakai saat navigasi langsung (route).
+/// Halaman "Pilih Alamat" — tujuan route `/address-picker`. Aplikasi
+/// biasanya membuka versi bottom sheet ([AddressPickerSheet]); halaman
+/// penuh ini dipakai bila navigasi langsung ke route diperlukan (dan oleh
+/// tes tampilan pencarian/shimmer).
 class AddressPickerPage extends StatelessWidget {
   const AddressPickerPage({super.key});
 
@@ -21,12 +24,18 @@ class AddressPickerPage extends StatelessWidget {
   }
 }
 
-/// Bottom sheet version — dipakai dari location permission page.
+/// Bottom sheet version — dipakai dari halaman izin lokasi maupun home
+/// (chip lokasi & kartu alamat).
 class AddressPickerSheet extends StatelessWidget {
   const AddressPickerSheet({super.key});
 
   static Future<void> show(BuildContext context) {
+    // Binding dipanggil manual di sini (bukan lewat GetPage) karena sheet
+    // dibuka sebagai bottom sheet tanpa route sendiri.
     AddressPickerBinding().dependencies();
+    // Sheet dibuka ulang → buang sisa sesi sebelumnya (query, hasil, dan
+    // status offline yang basi) supaya tidak langsung menampilkan data lama.
+    Get.find<AddressPickerController>().clearQuery();
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,

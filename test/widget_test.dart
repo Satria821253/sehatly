@@ -8,8 +8,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:sehatly/app/controllers/home_controller.dart';
 import 'package:sehatly/app/services/network_status.dart';
 import 'package:sehatly/main.dart';
 
@@ -158,11 +160,13 @@ void main() {
       find.textContaining('Koordinat -7.76863, 110.39122'),
       findsOneWidget,
     );
-    // Reverse geocode butuh jaringan (diblokir test) → kartu menunggu
-    // alamat, bukan crash.
-    expect(
-      find.textContaining('Menentukan alamat dari lokasi GPS'),
-      findsWidgets,
-    );
+    // Reverse geocode butuh jaringan (diblokir test) → lookup dianggap
+    // gagal dan kartu mengajak memilih alamat manual, bukan menampilkan
+    // "Menentukan alamat…" seolah prosesnya masih berjalan tanpa ujung.
+    expect(find.textContaining('Alamat belum ditemukan'), findsWidgets);
+
+    // Tutup controller supaya timer polling tidak tertinggal di akhir tes.
+    // (Get.reset() tidak memanggil onClose — harus Get.delete.)
+    Get.delete<HomeController>(force: true);
   });
 }

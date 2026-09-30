@@ -17,9 +17,10 @@ class HomePage extends GetView<HomeController> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F8FB),
       body: SafeArea(
-        // Mode offline: isi disembunyikan — hanya Lottie loading (grace
-        // beberapa detik) lalu panel "Cek Jaringanmu". Tab bar tetap tampil
-        // karena berada di luar body ini.
+        // Mode offline: isi ListView disembunyikan — Lottie loading dulu
+        // (masa tenggang beberapa detik), lalu panel "Cek Jaringanmu".
+        // Scaffold di sekelilingnya tetap terlihat, jadi chrome halaman
+        // tidak ikut hilang.
         child: Obx(() {
           if (controller.offline.value) {
             if (!controller.offlinePanelVisible.value) {
@@ -220,7 +221,12 @@ class _AddressCard extends StatelessWidget {
                             : (c.address.value.isNotEmpty
                                   ? c.address.value
                                   : (c.coordinateLabel.isNotEmpty
-                                        ? 'Menentukan alamat dari lokasi GPS...'
+                                        ? (c.addressLookupFailed.value
+                                              ? 'Alamat belum ditemukan. Ketuk '
+                                                    'chip lokasi di kanan atas '
+                                                    'untuk memilih manual.'
+                                              : 'Menentukan alamat dari lokasi '
+                                                    'GPS...')
                                         : 'Belum ada alamat. Ketuk lokasi di kanan '
                                               'atas untuk memilih.')),
                         style: GoogleFonts.poppins(

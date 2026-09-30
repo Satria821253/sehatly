@@ -20,6 +20,7 @@ class ConfirmLocationSheet extends StatelessWidget {
     required this.loading,
     required this.hasAddress,
     required this.onConfirm,
+    this.note,
   });
 
   /// Nama lokasi (hasil reverse geocode).
@@ -33,6 +34,11 @@ class ConfirmLocationSheet extends StatelessWidget {
 
   /// false → alamat belum ditemukan (catatan tampil, tombol dikunci).
   final bool hasAddress;
+
+  /// Catatan tambahan di bawah detail (mis. penjelasan kondisi offline) —
+  /// tampil walau [hasAddress] true. Bila null dan [hasAddress] false,
+  /// memakai catatan bawaan "alamat belum ditemukan".
+  final String? note;
 
   final VoidCallback onConfirm;
 

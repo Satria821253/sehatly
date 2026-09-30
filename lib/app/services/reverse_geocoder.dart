@@ -19,7 +19,7 @@ Future<String?> lookupAddress(double lat, double lng) async {
         .timeout(const Duration(seconds: 8));
     if (google != null && google.full.isNotEmpty) return google.full;
   } catch (e) {
-    debugPrint('>>> lookup alamat (Google): $e');
+    debugPrint('Lookup alamat Google gagal: $e');
   }
 
   try {
@@ -28,7 +28,7 @@ Future<String?> lookupAddress(double lat, double lng) async {
         .timeout(const Duration(seconds: 12));
     if (osm != null && osm.full.isNotEmpty) return osm.full;
   } catch (e) {
-    debugPrint('>>> lookup alamat (OSM): $e');
+    debugPrint('Lookup alamat OSM gagal: $e');
   }
   return null;
 }
@@ -46,7 +46,7 @@ Future<({double lat, double lng})?> currentCoordinates() async {
         .timeout(const Duration(seconds: 15));
     return (lat: pos.latitude, lng: pos.longitude);
   } catch (e) {
-    debugPrint('>>> ambil koordinat GPS: $e');
+    debugPrint('Gagal mengambil koordinat GPS: $e');
     return null;
   }
 }

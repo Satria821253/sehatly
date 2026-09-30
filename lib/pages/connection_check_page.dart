@@ -7,12 +7,15 @@ import '../app/theme/app_colors.dart';
 import '../widgets/lottie_loading.dart';
 import '../widgets/primary_button.dart';
 
-/// Layar pertama setelah splash bila internet jelek/matai — menahan user
-/// di sini (bukan membiarkannya masuk home dalam kondisi kosong).
+/// Layar pertama setelah splash bila internet jelek/mati — menahan user
+/// hanya pada cek otomatis pertama, supaya ia tidak langsung masuk home
+/// dalam kondisi kosong.
 ///
 /// Isinya cuma animasi loading bawaan, satu baris penjelasan, dan tombol
 /// **Coba Lagi**. Ditekan → animasi tetap berputar sambil koneksi dicek
-/// ulang; kalau pulih, langsung menuju halaman tujuan.
+/// ulang; kalau pulih, langsung menuju halaman tujuan. Kalau masih mati,
+/// user dilepas ke halaman tujuan (izin lokasi / intro / home) — tidak
+/// ditahan di sini terus-menerus.
 class ConnectionCheckPage extends GetView<ConnectionCheckController> {
   const ConnectionCheckPage({super.key});
 

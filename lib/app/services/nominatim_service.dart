@@ -10,9 +10,10 @@ export '../models/address_result.dart';
 /// Fallback pencarian alamat memakai **OpenStreetMap Nominatim** — gratis,
 /// tanpa API key, tanpa billing.
 ///
-/// Dipakai otomatis oleh [AddressPickerController] hanya ketika Google
-/// (Places Autocomplete / Geocoding API) gagal, misalnya billing belum
-/// aktif. Begitu Google jalan, fallback ini otomatis tidak terpakai.
+/// Dipakai sebagai cadangan di tiga tempat: pencarian alamat (bila Google
+/// Places gagal), reverse geocode alur izin lokasi/home, dan map picker
+/// (bila Google Geocoding gagal). Begitu Google jalan, cadangan ini otomatis
+/// tidak terpakai.
 ///
 /// Kebijakan Nominatim: maksimal 1 request/detik + User-Agent wajib.
 class NominatimService {
@@ -29,7 +30,12 @@ class NominatimService {
     if (last != null) {
       final wait = _minInterval - DateTime.now().difference(last);
       if (wait > Duration.zero) {
+        // Klaim slot berikutnya sebelum menunggu: pemanggil kedua yang
+        // masuk selama jeda ini menghitung dari slot yang sudah diklaim,
+        // jadi dua request tidak pernah meluncur berdekatan.
+        _lastCall = DateTime.now().add(wait);
         await Future.delayed(wait);
+        return;
       }
     }
     _lastCall = DateTime.now();

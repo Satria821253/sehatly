@@ -79,7 +79,6 @@ class GooglePlacesService {
     for (final mode in order) {
       final result = await _searchWith(mode, q);
       if (result != null) {
-        if (_activeMode != mode) debugPrint('Places mode aktif: ${mode.name}');
         _activeMode = mode;
         await GoogleQuota.recordSuccess();
         return result;
@@ -91,12 +90,18 @@ class GooglePlacesService {
 
   /// `null` = request gagal / API belum di-enable (coba mode lain),
   /// list = sukses (bisa kosong).
-  Future<List<AddressResult>?> _searchWith(PlacesApiMode mode, String q) {
+  ///
+  /// `await` di dalam `try` itu wajib: timeout dan body bukan JSON
+  /// melempar lewat Future (bukan sinkron) — tanpa await, errornya lolos
+  /// ke pemanggil dan fallback OpenStreetMap tidak pernah tercapai.
+  Future<List<AddressResult>?> _searchWith(PlacesApiMode mode, String q) async {
     try {
-      return mode == PlacesApiMode.legacy ? _searchLegacy(q) : _searchV1(q);
+      return mode == PlacesApiMode.legacy
+          ? await _searchLegacy(q)
+          : await _searchV1(q);
     } catch (e) {
       debugPrint('Places ${mode.name} error: $e');
-      return Future.value(null);
+      return null;
     }
   }
 

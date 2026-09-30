@@ -6,6 +6,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 import '../app/controllers/address_picker_controller.dart';
 import '../app/services/initial_position.dart';
+import '../app/services/network_status.dart';
 import '../app/services/reverse_geocoder.dart';
 import '../app/theme/app_colors.dart';
 import '../app/utils/pinch_zoom.dart';
@@ -37,10 +38,19 @@ class _MapPickerPageState extends State<MapPickerPage> {
 
   /// true = alamat berasal dari reverse geocode (bukan koordinat mentah).
   bool _hasAddress = false;
+
+  /// true = geocode gagal karena tidak ada koneksi → sheet tetap boleh
+  /// dikonfirmasi (alamat diisi koordinat, dilengkapi nanti saat online).
+  bool _offlineNoNet = false;
   bool _loading = true;
 
   /// true = posisi awal sudah diketahui → peta boleh dirender.
   bool _ready = false;
+
+  /// Nomor urut request reverse geocode — respons yang datang terlambat
+  /// (stale) dibuang, supaya alamat titik lama tidak menimpa titik baru
+  /// (pakai pola yang sama dengan `_requestSeq` di pemilih alamat).
+  int _seq = 0;
 
   /// Sedang mengambil lokasi GPS (tombol "lokasi saya" menampilkan spinner).
   bool _locating = false;
@@ -57,7 +67,9 @@ class _MapPickerPageState extends State<MapPickerPage> {
     _initPosition();
   }
 
-  /// Buka peta di lokasi Anda — bukan di koordinat hardcode.
+  /// Buka peta di lokasi Anda: GPS saat ini → lokasi terakhir yang pernah
+  /// dipilih user → pusat kota (`kFallbackCenter`) sebagai jaring
+  /// pengaman. Peta tidak pernah dirender di titik acak lalu melompat.
   Future<void> _initPosition() async {
     final target = await resolveInitialPosition();
     if (!mounted) return;
@@ -122,6 +134,7 @@ class _MapPickerPageState extends State<MapPickerPage> {
 
   /// Ambil alamat untuk titik yang sedang dituju, lalu tampilkan di sheet.
   Future<void> _fetchAddress(LatLng pos) async {
+    final seq = ++_seq;
     setState(() {
       _center = pos;
       _loading = true;
@@ -130,14 +143,24 @@ class _MapPickerPageState extends State<MapPickerPage> {
       pos.latitude,
       pos.longitude,
     );
-    if (!mounted) return;
+    if (!mounted || seq != _seq) return; // respons basi — buang
+
+    final hasResult = result != null && result.full.isNotEmpty;
+
+    // Geocode gagal → pastikan penyebabnya bukan koneksi. Saat offline
+    // sheet tetap boleh dikonfirmasi: alamat diisi koordinat dulu, lalu
+    // dilengkapi otomatis oleh halaman home begitu internet pulih.
+    var offlineNoNet = false;
+    if (!hasResult) {
+      offlineNoNet = !await hasInternetConnection();
+      if (!mounted || seq != _seq) return;
+    }
 
     setState(() {
-      _hasAddress = result != null && result.full.isNotEmpty;
+      _hasAddress = hasResult;
+      _offlineNoNet = offlineNoNet;
       _title = result?.label ?? 'Lokasi dipilih';
-      // Kalau geocode gagal, koordinat tetap ditampilkan sebagai info —
-      // tapi tombol konfirmasi dikunci supaya koordinat mentah tidak
-      // pernah tersimpan sebagai "alamat".
+      // Geocode gagal → koordinat tetap ditampilkan sebagai info di sheet.
       _address =
           result?.full ??
           '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}';
@@ -246,7 +269,14 @@ class _MapPickerPageState extends State<MapPickerPage> {
               title: _title,
               address: _address,
               loading: _loading,
-              hasAddress: _hasAddress,
+              // Offline: geocode gagal bukan karena titiknya salah →
+              // konfirmasi tetap dibolehkan (alamat = koordinat dulu).
+              hasAddress: _hasAddress || _offlineNoNet,
+              note: _offlineNoNet
+                  ? 'Tidak ada koneksi — konfirmasi tetap bisa. Alamat '
+                      'diisi koordinat dulu, lalu dilengkapi otomatis saat '
+                      'internet kembali.'
+                  : null,
               onConfirm: () => _controller.confirmMapAddress(
                 _address,
                 _center.latitude,
