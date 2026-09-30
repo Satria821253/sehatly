@@ -9,4 +9,7 @@ class AppColors {
   static const Color midBlue = Color(0xFF1E4FA8);
   static const Color lightBlue = Color(0xFF2AA6C9);
   static const Color white = Colors.white;
+
+  /// Aksen pesan error — senada dengan pin tengah peta.
+  static const Color error = Color(0xFFE2195E);
 }
